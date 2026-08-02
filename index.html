@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MiTurno</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --paper:#F5F2EA; --paper-dim:#EDE8DA;
+  --ink:#20242F; --slate:#5B6478; --slate-soft:#8891A3;
+  --line:#D8D2C0;
+  --brand:#2B6E64; --brand-dark:#1E4F48; --brand-soft:#DCE9E4;
+  --wa:#25D366; --wa-dark:#1DA851;
+  --warn:#B5482E; --warn-soft:#F3DFD6;
+  --radius:14px; --radius-sm:8px;
+  --shadow:0 6px 24px rgba(32,36,47,0.08);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html,body{width:100%;overflow-x:hidden;}
+body{font-family:'IBM Plex Sans',sans-serif;background:var(--paper);color:var(--ink);min-height:100vh;}
+
+/* HEADER */
+header{background:var(--ink);color:var(--paper);padding:0 24px;height:60px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:50;}
+.brand{font-family:'Instrument Serif',serif;font-size:24px;font-style:italic;}
+.brand b{font-style:normal;color:var(--brand-soft);}
+.view-toggle{display:flex;gap:2px;background:rgba(255,255,255,0.08);border-radius:100px;padding:3px;}
+.view-toggle button{background:none;border:none;color:rgba(245,242,234,0.6);font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:600;padding:8px 18px;border-radius:100px;cursor:pointer;transition:all .2s;}
+.view-toggle button.active{background:var(--paper);color:var(--ink);}
+
+main{max-width:760px;margin:0 auto;padding:32px 20px 90px;}
+
+/* TITLES */
+.eyebrow{font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.12em;text-transform:uppercase;color:var(--brand);font-weight:600;margin-bottom:8px;}
+h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bottom:4px;}
+.subtitle{color:var(--slate);font-size:14.5px;margin-bottom:28px;}
+
+/* CARD */
+.card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:24px;margin-bottom:20px;box-shadow:var(--shadow);}
+.card-title{font-weight:700;font-size:15px;margin-bottom:16px;display:flex;align-items:center;gap:8px;}
+
+/* FORM */
+.field{margin-bottom:14px;}
+.field label{display:block;font-size:12px;font-weight:600;color:var(--slate);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;}
+.field input,.field select,.field textarea{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-family:'IBM Plex Sans',sans-serif;font-size:14.5px;background:var(--paper);color:var(--ink);}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--brand);}
+.field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+.hint{font-size:12px;color:var(--slate-soft);margin-top:6px;}
+
+/* BUTTONS */
+.btn{border:none;border-radius:var(--radius-sm);padding:12px 20px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:all .15s;}
+.btn-brand{background:var(--brand);color:#fff;}
+.btn-brand:hover{background:var(--brand-dark);}
+.btn-ghost{background:none;border:1.5px solid var(--line);color:var(--ink);}
+.btn-ghost:hover{background:var(--paper-dim);}
+.btn-wa{background:var(--wa);color:#fff;}
+.btn-wa:hover{background:var(--wa-dark);}
+.btn-block{width:100%;}
+.btn-sm{padding:7px 12px;font-size:12.5px;}
+.btn:disabled{opacity:0.4;cursor:not-allowed;}
+
+/* DATE CHIPS */
+.date-row{display:flex;gap:8px;overflow-x:auto;padding-bottom:6px;margin-bottom:20px;-webkit-overflow-scrolling:touch;scrollbar-width:none;}
+.date-row::-webkit-scrollbar{display:none;}
+.date-chip{flex-shrink:0;background:#fff;border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:10px 6px;min-width:58px;text-align:center;cursor:pointer;transition:all .15s;}
+.date-chip .dow{font-size:10.5px;color:var(--slate);text-transform:uppercase;font-weight:600;}
+.date-chip .dnum{font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:600;margin-top:2px;}
+.date-chip.active{background:var(--ink);border-color:var(--ink);}
+.date-chip.active .dow,.date-chip.active .dnum{color:var(--paper);}
+
+/* SLOTS */
+.slot-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(78px,1fr));gap:8px;}
+.slot{background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:10px 4px;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:13.5px;font-weight:600;cursor:pointer;transition:all .15s;}
+.slot:hover{border-color:var(--brand);}
+.slot.selected{background:var(--brand);border-color:var(--brand);color:#fff;}
+.slot.taken{background:var(--paper-dim);color:var(--slate-soft);text-decoration:line-through;cursor:not-allowed;}
+.empty-note{color:var(--slate);font-size:13.5px;padding:20px 0;text-align:center;}
+
+/* TICKET STUB (appointment card) */
+.ticket{background:#fff;border:1.5px dashed var(--line);border-radius:var(--radius);display:flex;margin-bottom:14px;overflow:hidden;box-shadow:var(--shadow);}
+.ticket-main{flex:1;padding:16px 18px;}
+.ticket-stub{width:92px;flex-shrink:0;background:var(--paper-dim);border-left:1.5px dashed var(--line);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:10px;text-align:center;}
+.ticket-stub .day{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;line-height:1;}
+.ticket-stub .mon{font-size:10.5px;text-transform:uppercase;color:var(--slate);margin-top:3px;font-weight:600;}
+.ticket-stub .time{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--brand);margin-top:8px;font-weight:600;}
+.ticket-name{font-weight:700;font-size:15.5px;}
+.ticket-service{font-size:13px;color:var(--slate);margin-top:2px;}
+.ticket-phone{font-size:12.5px;color:var(--slate-soft);margin-top:4px;font-family:'IBM Plex Mono',monospace;}
+.status-badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 9px;border-radius:100px;margin-top:8px;text-transform:uppercase;letter-spacing:0.03em;}
+.status-pendiente{background:#FBEBCC;color:#8A5B10;}
+.status-confirmado{background:var(--brand-soft);color:var(--brand-dark);}
+.status-cancelado{background:var(--warn-soft);color:var(--warn);}
+.status-atendido{background:#20242F;color:var(--paper);}
+.ticket-price{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--brand-dark);font-size:14px;margin-top:4px;}
+.ticket-actions{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;}
+.caja-card{background:var(--ink);color:var(--paper);border-radius:var(--radius);padding:22px 24px;margin-bottom:20px;box-shadow:var(--shadow);}
+.caja-top{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-bottom:6px;}
+.caja-label{font-family:'IBM Plex Mono',monospace;font-size:11px;text-transform:uppercase;letter-spacing:0.1em;color:rgba(245,242,234,0.55);}
+.caja-total{font-family:'Instrument Serif',serif;font-size:38px;font-style:italic;color:var(--paper);}
+.caja-total b{color:var(--brand-soft);font-style:normal;}
+.caja-sub{font-size:12.5px;color:rgba(245,242,234,0.55);margin-top:2px;}
+.caja-date{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);color:var(--paper);border-radius:var(--radius-sm);padding:8px 10px;font-family:'IBM Plex Sans',sans-serif;font-size:13px;}
+
+/* SERVICE LIST (config) */
+.svc-row{display:flex;gap:8px;align-items:center;margin-bottom:8px;}
+.svc-row input{flex:1;}
+.svc-row input.dur,.svc-row input.price{max-width:90px;flex:none;}
+.icon-btn{background:none;border:none;color:var(--warn);cursor:pointer;font-size:16px;padding:4px 8px;}
+
+.section{display:none;}
+.section.active{display:block;animation:fade .25s ease;}
+@keyframes fade{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+
+.empty-state{text-align:center;padding:50px 20px;color:var(--slate);}
+.empty-state .icon{font-size:36px;margin-bottom:10px;}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:12px 22px;border-radius:100px;font-size:13.5px;font-weight:500;z-index:200;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .25s;}
+.toast.show{opacity:1;}
+
+@media(max-width:600px){
+  header{flex-direction:column;align-items:flex-start;height:auto;padding:10px 14px;gap:8px;}
+  .brand{font-size:18px;}
+  .view-toggle{width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;justify-content:flex-start;}
+  .view-toggle::-webkit-scrollbar{display:none;}
+  .view-toggle button{padding:8px 14px;font-size:12.5px;white-space:nowrap;flex-shrink:0;}
+  main{padding:20px 14px 90px;}
+  h1{font-size:26px;}
+  .card{padding:18px;}
+  .field-row{grid-template-columns:1fr;}
+  .ticket{flex-direction:column;}
+  .ticket-stub{width:100%;flex-direction:row;justify-content:center;gap:10px;padding:8px;border-left:none;border-top:1.5px dashed var(--line);}
+  .ticket-stub .day,.ticket-stub .mon,.ticket-stub .time{margin:0;}
+  .caja-top{flex-direction:column;align-items:flex-start;gap:14px;}
+  .caja-date{width:100%;}
+  .svc-row{flex-wrap:wrap;}
+  .svc-row input{min-width:110px;}
+  .date-chip{min-width:50px;}
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">📅 Mi<b>Turno</b></div>
+  <div class="view-toggle">
+    <button class="active" onclick="showView('reservar',this)">Reservar</button>
+    <button onclick="showView('turnos',this)">Turnos a confirmar</button>
+    <button onclick="showView('agenda',this)">Agenda diaria</button>
+    <button onclick="showView('panel',this)">Panel</button>
+  </div>
+</header>
+
+<main>
+
+<!-- RESERVAR (vista del cliente) -->
+<div class="section active" id="view-reservar">
+  <div class="eyebrow" id="bizEyebrow">Reservar turno</div>
+  <h1 id="bizTitle">Elegí día y horario</h1>
+  <p class="subtitle" id="bizSubtitle">Se completa en menos de un minuto.</p>
+
+  <div class="date-row" id="dateRow"></div>
+
+  <div class="card">
+    <div class="card-title">🕐 Horarios disponibles</div>
+    <div class="slot-grid" id="slotGrid"></div>
+  </div>
+
+  <div class="card" id="bookingFormCard" style="display:none;">
+    <div class="card-title">📝 Tus datos</div>
+    <div class="field">
+      <label>Servicio</label>
+      <select id="fldService"></select>
+    </div>
+    <div class="field-row">
+      <div class="field"><label>Nombre</label><input type="text" id="fldName" placeholder="Ej: Ana Gomez"></div>
+      <div class="field"><label>Telefono</label><input type="text" id="fldPhone" placeholder="Ej: 261 555-0000"></div>
+    </div>
+    <button class="btn btn-wa btn-block" onclick="confirmarTurno()">
+      <span>💬</span> Confirmar por WhatsApp
+    </button>
+    <p class="hint">Se abre WhatsApp con el mensaje ya armado. El turno queda como "pendiente" hasta que el negocio lo confirme.</p>
+  </div>
+</div>
+
+<!-- TURNOS (pendientes por confirmar, vista del negocio) -->
+<div class="section" id="view-turnos">
+  <div class="eyebrow">Listado</div>
+  <h1>Turnos a confirmar</h1>
+  <p class="subtitle">Turnos reservados por tus clientes, pendientes de confirmar.</p>
+
+  <div class="card">
+    <div id="ticketListPendientes"></div>
+  </div>
+</div>
+
+<!-- AGENDA DIARIA (confirmados + caja diaria, vista del negocio) -->
+<div class="section" id="view-agenda">
+  <div class="eyebrow">Agenda diaria</div>
+  <h1>Agenda diaria</h1>
+  <p class="subtitle">Turnos del dia seleccionado, ordenados por horario.</p>
+
+  <div class="caja-card">
+    <div class="caja-top">
+      <div>
+        <div class="caja-label">Caja del dia</div>
+        <div class="caja-total">$ <b id="cajaTotal">0</b></div>
+        <div class="caja-sub" id="cajaSub">0 turnos atendidos</div>
+      </div>
+      <input type="date" class="caja-date" id="agendaDate" onchange="renderAgenda()">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🟢 Turnos confirmados</div>
+    <div id="ticketList"></div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">💰 Realizados - cobro pendiente</div>
+    <div id="ticketListCobrar"></div>
+  </div>
+</div>
+
+<!-- PANEL (configuracion del negocio) -->
+<div class="section" id="view-panel">
+  <div class="eyebrow">Configuracion</div>
+  <h1>Datos del negocio</h1>
+  <p class="subtitle">Ajusta los datos, horarios y servicios de tu negocio.</p>
+
+  <div class="card">
+    <div class="field"><label>Nombre del negocio</label><input type="text" id="cfgName" placeholder="Ej: Peluqueria Sol"></div>
+    <div class="field"><label>WhatsApp del negocio (con codigo de pais, sin +)</label><input type="text" id="cfgPhone" placeholder="Ej: 5492610000000"></div>
+    <div class="field-row">
+      <div class="field"><label>Hora de apertura</label><input type="time" id="cfgOpen" value="09:00"></div>
+      <div class="field"><label>Hora de cierre</label><input type="time" id="cfgClose" value="18:00"></div>
+    </div>
+    <div class="field"><label>Duracion de cada turno (min)</label><input type="number" id="cfgSlot" value="30" min="5" step="5"></div>
+
+    <div class="field">
+      <label>Servicios</label>
+      <div class="hint" style="margin:0 0 8px;display:flex;gap:8px;">
+        <span style="flex:1;">Nombre</span><span style="width:90px;">Duracion</span><span style="width:90px;">Precio</span>
+      </div>
+      <div id="svcList"></div>
+      <button class="btn btn-ghost btn-sm" onclick="addServiceRow()">+ Agregar servicio</button>
+    </div>
+
+    <button class="btn btn-brand btn-block" onclick="guardarConfig()" style="margin-top:10px;">Guardar configuracion</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⚠️ Zona de riesgo</div>
+    <p class="hint" style="margin-bottom:12px;">Esto borra todos los turnos y la configuracion guardados en este navegador, para empezar de cero.</p>
+    <button class="btn btn-ghost btn-block" onclick="reiniciarDatos()" style="border-color:var(--warn);color:var(--warn);">Reiniciar todos los datos</button>
+  </div>
+</div>
+
+</main>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ---------- ESTADO / PERSISTENCIA ----------
+   Por ahora todo se guarda en localStorage.
+   Cuando conectes Firebase, reemplazar loadConfig/saveConfig
+   y loadAppointments/saveAppointments por lecturas/escrituras a Firestore. */
+
+var DIAS = ['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
+var MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
+
+var defaultConfig = {
+  name: 'Mi Negocio',
+  phone: '',
+  open: '09:00',
+  close: '18:00',
+  slotMin: 30,
+  services: [
+    { name: 'Consulta general', dur: 30, price: 0 }
+  ]
+};
+
+function loadConfig() {
+  try { return JSON.parse(localStorage.getItem('mt_config')) || defaultConfig; }
+  catch(e){ return defaultConfig; }
+}
+function saveConfigData(cfg) { localStorage.setItem('mt_config', JSON.stringify(cfg)); }
+
+function loadAppointments() {
+  try { return JSON.parse(localStorage.getItem('mt_appointments')) || []; }
+  catch(e){ return []; }
+}
+function saveAppointments(list) { localStorage.setItem('mt_appointments', JSON.stringify(list)); }
+
+var config = loadConfig();
+var appointments = loadAppointments();
+var selectedDate = null;
+var selectedTime = null;
+
+/* ---------- TOAST ---------- */
+function toast(msg) {
+  var t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(function(){ t.classList.remove('show'); }, 2200);
+}
+
+/* ---------- NAVEGACION ---------- */
+function showView(id, btn) {
+  document.querySelectorAll('.section').forEach(function(s){ s.classList.remove('active'); });
+  document.getElementById('view-' + id).classList.add('active');
+  document.querySelectorAll('.view-toggle button').forEach(function(b){ b.classList.remove('active'); });
+  if (btn) btn.classList.add('active');
+  if (id === 'turnos') renderPendientes();
+  if (id === 'agenda') renderAgenda();
+}
+
+/* ---------- FECHAS ---------- */
+function fmtISO(d) { return d.toISOString().split('T')[0]; }
+
+function renderDateRow() {
+  var row = document.getElementById('dateRow');
+  row.innerHTML = '';
+  var today = new Date();
+  for (var i=0; i<14; i++) {
+    var d = new Date(today); d.setDate(today.getDate() + i);
+    var iso = fmtISO(d);
+    var chip = document.createElement('div');
+    chip.className = 'date-chip' + (iso === selectedDate ? ' active' : '');
+    chip.innerHTML = '<div class="dow">' + DIAS[d.getDay()] + '</div><div class="dnum">' + d.getDate() + '</div>';
+    chip.onclick = (function(iso){ return function(){ selectDate(iso); }; })(iso);
+    row.appendChild(chip);
+  }
+}
+
+function selectDate(iso) {
+  selectedDate = iso; selectedTime = null;
+  document.getElementById('bookingFormCard').style.display = 'none';
+  renderDateRow(); renderSlots();
+}
+
+/* ---------- HORARIOS ---------- */
+function timeToMin(t) { var p = t.split(':'); return parseInt(p[0])*60 + parseInt(p[1]); }
+function minToTime(m) { var h = Math.floor(m/60), mm = m%60; return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm; }
+
+function renderSlots() {
+  var grid = document.getElementById('slotGrid');
+  grid.innerHTML = '';
+  if (!selectedDate) { grid.innerHTML = '<div class="empty-note">Elegi un dia arriba.</div>'; return; }
+
+  var start = timeToMin(config.open), end = timeToMin(config.close), step = parseInt(config.slotMin) || 30;
+  var takenTimes = appointments.filter(function(a){ return a.date === selectedDate && a.status !== 'cancelado'; }).map(function(a){ return a.time; });
+
+  var any = false;
+  for (var m = start; m < end; m += step) {
+    any = true;
+    var t = minToTime(m);
+    var taken = takenTimes.indexOf(t) !== -1;
+    var el = document.createElement('div');
+    el.className = 'slot' + (taken ? ' taken' : '') + (t === selectedTime ? ' selected' : '');
+    el.textContent = t;
+    if (!taken) el.onclick = (function(t){ return function(){ selectTime(t); }; })(t);
+    grid.appendChild(el);
+  }
+  if (!any) grid.innerHTML = '<div class="empty-note">Este negocio no configuro horarios todavia.</div>';
+}
+
+function selectTime(t) {
+  selectedTime = t;
+  renderSlots();
+  document.getElementById('bookingFormCard').style.display = 'block';
+  document.getElementById('bookingFormCard').scrollIntoView({behavior:'smooth', block:'nearest'});
+}
+
+/* ---------- FORMULARIO DE RESERVA ---------- */
+function renderServiceOptions() {
+  var sel = document.getElementById('fldService');
+  sel.innerHTML = '';
+  (config.services || []).forEach(function(s){
+    var o = document.createElement('option');
+    o.value = s.name; o.textContent = s.name + ' (' + s.dur + ' min' + (s.price ? ' - $' + s.price : '') + ')';
+    sel.appendChild(o);
+  });
+}
+
+function confirmarTurno() {
+  var name = document.getElementById('fldName').value.trim();
+  var phone = document.getElementById('fldPhone').value.trim();
+  var serviceName = document.getElementById('fldService').value;
+  var serviceObj = (config.services || []).find(function(s){ return s.name === serviceName; }) || {};
+  if (!name || !phone) { toast('Completa nombre y telefono'); return; }
+  if (!selectedDate || !selectedTime) { toast('Elegi dia y horario'); return; }
+  if (!config.phone) { toast('Este negocio todavia no configuro su WhatsApp'); return; }
+
+  var appt = {
+    id: 'a' + Date.now(),
+    date: selectedDate, time: selectedTime,
+    service: serviceName, price: serviceObj.price || 0, name: name, phone: phone,
+    status: 'pendiente', paid: false, createdAt: Date.now()
+  };
+  appointments.push(appt);
+  saveAppointments(appointments);
+  updateTurnosCount();
+
+  var d = new Date(selectedDate + 'T00:00:00');
+  var fecha = d.getDate() + ' de ' + MESES[d.getMonth()];
+  var msg = 'Hola! Quiero reservar un turno en ' + config.name + '.%0A' +
+            'Servicio: ' + serviceName + '%0A' +
+            'Dia: ' + fecha + '%0A' +
+            'Hora: ' + selectedTime + '%0A' +
+            'Nombre: ' + name;
+  var url = 'https://wa.me/' + config.phone.replace(/[^0-9]/g,'') + '?text=' + msg;
+  window.open(url, '_blank');
+
+  toast('Turno reservado, abriendo WhatsApp...');
+  document.getElementById('fldName').value = '';
+  document.getElementById('fldPhone').value = '';
+  document.getElementById('bookingFormCard').style.display = 'none';
+  selectedTime = null;
+  renderSlots();
+}
+
+function renderCaja() {
+  var dateInput = document.getElementById('agendaDate');
+  if (!dateInput) return;
+  if (!dateInput.value) dateInput.value = fmtISO(new Date());
+  var day = dateInput.value;
+  var cobrados = appointments.filter(function(a){ return (a.paidAt || a.date) === day && a.status === 'atendido' && a.paid; });
+  var total = cobrados.reduce(function(sum,a){ return sum + (parseFloat(a.price)||0); }, 0);
+  document.getElementById('cajaTotal').textContent = total.toLocaleString('es-AR');
+  document.getElementById('cajaSub').textContent = cobrados.length + (cobrados.length === 1 ? ' turno cobrado' : ' turnos cobrados');
+}
+
+/* ---------- PANEL: TICKETS ---------- */
+function buildTicketEl(a) {
+  var d = new Date(a.date + 'T00:00:00');
+  var el = document.createElement('div');
+  el.className = 'ticket';
+  var actions = '';
+  var statusLabel = a.status;
+  var badgeClass = 'status-' + a.status;
+  if (a.status === 'pendiente') {
+    actions += '<button class="btn btn-brand btn-sm" onclick="setStatus(\'' + a.id + '\',\'confirmado\')">Confirmar</button>';
+    actions += '<button class="btn btn-ghost btn-sm" onclick="setStatus(\'' + a.id + '\',\'cancelado\')">Cancelar</button>';
+  } else if (a.status === 'confirmado') {
+    actions += '<button class="btn btn-brand btn-sm" onclick="setStatus(\'' + a.id + '\',\'atendido\')">✅ Confirmar realizado</button>';
+    actions += '<button class="btn btn-ghost btn-sm" onclick="setStatus(\'' + a.id + '\',\'cancelado\')">Cancelar</button>';
+  } else if (a.status === 'atendido' && !a.paid) {
+    statusLabel = 'cobro pendiente';
+    badgeClass = 'status-pendiente';
+    actions += '<button class="btn btn-wa btn-sm" onclick="confirmarPago(\'' + a.id + '\')">💰 Confirmar pago</button>';
+  } else if (a.status === 'atendido' && a.paid) {
+    statusLabel = 'cobrado';
+    badgeClass = 'status-atendido';
+  }
+  actions += '<button class="btn btn-ghost btn-sm" onclick="borrarTurno(\'' + a.id + '\')">Eliminar</button>';
+  el.innerHTML =
+    '<div class="ticket-main">' +
+      '<div class="ticket-name">' + escapeHtml(a.name) + '</div>' +
+      '<div class="ticket-service">' + escapeHtml(a.service) + '</div>' +
+      '<div class="ticket-phone">' + escapeHtml(a.phone) + '</div>' +
+      (a.price ? '<div class="ticket-price">$ ' + a.price + '</div>' : '') +
+      '<span class="status-badge ' + badgeClass + '">' + statusLabel + '</span>' +
+      '<div class="ticket-actions">' + actions + '</div>' +
+    '</div>' +
+    '<div class="ticket-stub">' +
+      '<div class="day">' + d.getDate() + '</div>' +
+      '<div class="mon">' + MESES[d.getMonth()] + '</div>' +
+      '<div class="time">' + a.time + '</div>' +
+    '</div>';
+  return el;
+}
+
+/* Pestaña "Turnos": todos los pendientes por confirmar, sin importar el dia */
+function renderPendientes() {
+  var pendList = document.getElementById('ticketListPendientes');
+  if (!pendList) return;
+  var pendientes = appointments
+    .filter(function(a){ return a.status === 'pendiente'; })
+    .sort(function(a,b){ return (a.date+a.time).localeCompare(b.date+b.time); });
+  if (!pendientes.length) {
+    pendList.innerHTML = '<div class="empty-state"><div class="icon">✅</div><p>No hay turnos pendientes de confirmar.</p></div>';
+  } else {
+    pendList.innerHTML = '';
+    pendientes.forEach(function(a){ pendList.appendChild(buildTicketEl(a)); });
+  }
+}
+
+/* Pestaña "Agenda diaria": solo lo del dia seleccionado, ordenado por horario */
+function renderAgendaLists() {
+  var dateInput = document.getElementById('agendaDate');
+  if (!dateInput) return;
+  if (!dateInput.value) dateInput.value = fmtISO(new Date());
+  var day = dateInput.value;
+
+  var confList = document.getElementById('ticketList');
+  if (confList) {
+    var confirmados = appointments
+      .filter(function(a){ return a.status === 'confirmado' && a.date === day; })
+      .sort(function(a,b){ return a.time.localeCompare(b.time); });
+    if (!confirmados.length) {
+      confList.innerHTML = '<div class="empty-state"><div class="icon">🗓️</div><p>No hay turnos confirmados para este dia.</p></div>';
+    } else {
+      confList.innerHTML = '';
+      confirmados.forEach(function(a){ confList.appendChild(buildTicketEl(a)); });
+    }
+  }
+
+  var cobrarList = document.getElementById('ticketListCobrar');
+  if (cobrarList) {
+    var porCobrar = appointments
+      .filter(function(a){ return a.status === 'atendido' && !a.paid && a.date === day; })
+      .sort(function(a,b){ return a.time.localeCompare(b.time); });
+    if (!porCobrar.length) {
+      cobrarList.innerHTML = '<div class="empty-state"><div class="icon">💵</div><p>No hay turnos realizados con cobro pendiente para este dia.</p></div>';
+    } else {
+      cobrarList.innerHTML = '';
+      porCobrar.forEach(function(a){ cobrarList.appendChild(buildTicketEl(a)); });
+    }
+  }
+}
+
+function renderAgenda() {
+  renderAgendaLists();
+  renderCaja();
+}
+
+function setStatus(id, status) {
+  appointments = appointments.map(function(a){ if (a.id === id) a.status = status; return a; });
+  saveAppointments(appointments); renderPendientes(); renderAgendaLists(); renderSlots(); updateTurnosCount(); renderCaja();
+  toast('Turno ' + status);
+}
+
+function confirmarPago(id) {
+  appointments = appointments.map(function(a){ if (a.id === id) { a.paid = true; a.paidAt = fmtISO(new Date()); } return a; });
+  saveAppointments(appointments); renderAgendaLists(); renderCaja();
+  toast('Pago confirmado');
+}
+
+function borrarTurno(id) {
+  appointments = appointments.filter(function(a){ return a.id !== id; });
+  saveAppointments(appointments); renderPendientes(); renderAgendaLists(); renderSlots(); updateTurnosCount(); renderCaja();
+  toast('Turno eliminado');
+}
+
+function reiniciarDatos() {
+  if (!confirm('Esto va a borrar todos los turnos y la configuracion guardados en este navegador. Esta accion no se puede deshacer. Confirmas?')) return;
+  localStorage.removeItem('mt_appointments');
+  localStorage.removeItem('mt_config');
+  location.reload();
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+
+/* ---------- PANEL: CONFIGURACION ---------- */
+function renderServiceRows() {
+  var wrap = document.getElementById('svcList');
+  wrap.innerHTML = '';
+  (config.services || []).forEach(function(s, i){
+    var row = document.createElement('div');
+    row.className = 'svc-row';
+    row.innerHTML =
+      '<input type="text" value="' + escapeHtml(s.name) + '" placeholder="Servicio" data-i="' + i + '" data-f="name" oninput="editService(this)">' +
+      '<input type="number" class="dur" value="' + s.dur + '" min="5" step="5" title="Duracion (min)" data-i="' + i + '" data-f="dur" oninput="editService(this)">' +
+      '<input type="number" class="price" value="' + (s.price||0) + '" min="0" step="50" title="Precio ($)" data-i="' + i + '" data-f="price" oninput="editService(this)">' +
+      '<button class="icon-btn" onclick="removeService(' + i + ')" title="Eliminar">✕</button>';
+    wrap.appendChild(row);
+  });
+}
+function editService(input) {
+  var i = parseInt(input.getAttribute('data-i')), f = input.getAttribute('data-f');
+  config.services[i][f] = (f === 'dur' || f === 'price') ? (parseFloat(input.value)||0) : input.value;
+}
+function addServiceRow() {
+  config.services.push({ name:'Nuevo servicio', dur:30, price:0 });
+  renderServiceRows();
+}
+function removeService(i) {
+  config.services.splice(i,1);
+  renderServiceRows();
+}
+
+function fillConfigForm() {
+  document.getElementById('cfgName').value = config.name || '';
+  document.getElementById('cfgPhone').value = config.phone || '';
+  document.getElementById('cfgOpen').value = config.open || '09:00';
+  document.getElementById('cfgClose').value = config.close || '18:00';
+  document.getElementById('cfgSlot').value = config.slotMin || 30;
+  renderServiceRows();
+}
+
+function guardarConfig() {
+  config.name = document.getElementById('cfgName').value.trim() || 'Mi Negocio';
+  config.phone = document.getElementById('cfgPhone').value.trim();
+  config.open = document.getElementById('cfgOpen').value;
+  config.close = document.getElementById('cfgClose').value;
+  config.slotMin = parseInt(document.getElementById('cfgSlot').value) || 30;
+  saveConfigData(config);
+  updateBizHeader();
+  renderServiceOptions();
+  renderSlots();
+  toast('Configuracion guardada');
+}
+
+function updateBizHeader() {
+  document.getElementById('bizEyebrow').textContent = config.name || 'Reservar turno';
+}
+
+function updateTurnosCount() {
+  var el = document.getElementById('turnosCount');
+  if (!el) return;
+  var activos = appointments.filter(function(a){ return a.status !== 'cancelado'; }).length;
+  el.textContent = activos;
+}
+
+/* ---------- INIT ---------- */
+window.onload = function() {
+  updateBizHeader();
+  renderDateRow();
+  renderServiceOptions();
+  renderSlots();
+  fillConfigForm();
+  updateTurnosCount();
+  renderCaja();
+};
+</script>
+</body>
+</html>
