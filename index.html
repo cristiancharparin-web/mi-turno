@@ -50,6 +50,9 @@ header{background:var(--ink);color:var(--paper);padding:0 24px;height:60px;displ
 .view-toggle{display:flex;gap:2px;background:rgba(255,255,255,0.08);border-radius:100px;padding:3px;}
 .view-toggle button{background:none;border:none;color:rgba(245,242,234,0.6);font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:600;padding:8px 18px;border-radius:100px;cursor:pointer;transition:all .2s;}
 .view-toggle button.active{background:var(--paper);color:var(--ink);}
+.subtabs{display:inline-flex;gap:2px;background:var(--paper-dim);border:1px solid var(--line);border-radius:100px;padding:3px;margin-bottom:20px;}
+.subtabs button{background:none;border:none;color:var(--slate);font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:600;padding:8px 18px;border-radius:100px;cursor:pointer;transition:all .2s;}
+.subtabs button.active{background:var(--ink);color:var(--paper);}
 
 main{max-width:760px;margin:0 auto;padding:32px 20px 90px;}
 
@@ -75,6 +78,10 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 .client-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px;margin-top:8px;}
 .client-row .client-num{font-family:'IBM Plex Mono',monospace;color:var(--brand-dark);font-weight:700;}
 .client-row .client-meta{font-size:12.5px;color:var(--slate);margin-top:2px;}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;}
+.kpi-card{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px 18px;box-shadow:var(--shadow);}
+.kpi-label{font-family:'IBM Plex Mono',monospace;font-size:10.5px;text-transform:uppercase;letter-spacing:0.08em;color:var(--slate);font-weight:600;}
+.kpi-value{font-family:'Instrument Serif',serif;font-size:28px;font-style:italic;margin-top:4px;color:var(--ink);}
 
 /* BUTTONS */
 .btn{border:none;border-radius:var(--radius-sm);padding:12px 20px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:all .15s;}
@@ -177,6 +184,7 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
     <button class="active" onclick="showView('reservar',this)">Reservar</button>
     <button onclick="showView('turnos',this)">Turnos a confirmar</button>
     <button onclick="showView('agenda',this)">Agenda diaria</button>
+    <button onclick="showView('reportes',this)">Reportes</button>
     <button onclick="showView('panel',this)">Panel</button>
   </div>
 </header>
@@ -262,6 +270,52 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
   </div>
 </div>
 
+<!-- REPORTES (resumen del negocio por periodo) -->
+<div class="section" id="view-reportes">
+  <div class="eyebrow">Reportes</div>
+  <h1>Reportes</h1>
+  <p class="subtitle">Resumen del negocio y base de clientes.</p>
+
+  <div class="subtabs">
+    <button class="active" id="subtabResumen" onclick="showReportesSub('resumen')">Resumen</button>
+    <button id="subtabClientes" onclick="showReportesSub('clientes')">Clientes</button>
+  </div>
+
+  <div id="reportesResumen">
+    <div class="card">
+      <div class="field-row">
+        <div class="field"><label>Desde</label><input type="date" id="repFrom" onchange="renderReportes()"></div>
+        <div class="field"><label>Hasta</label><input type="date" id="repTo" onchange="renderReportes()"></div>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card"><div class="kpi-label">Facturado</div><div class="kpi-value" id="repFacturado">$ 0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Turnos atendidos</div><div class="kpi-value" id="repAtendidos">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Cancelados</div><div class="kpi-value" id="repCancelados">0</div></div>
+      <div class="kpi-card"><div class="kpi-label">Clientes nuevos</div><div class="kpi-value" id="repClientesNuevos">0</div></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📅 Facturacion por dia</div>
+      <div id="repPorDia"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">📋 Detalle del dia</div>
+      <div id="repDetalleDia"></div>
+    </div>
+  </div>
+
+  <div id="reportesClientes" style="display:none;">
+    <div class="card">
+      <div class="card-title">👥 Base de clientes</div>
+      <p class="hint" style="margin-bottom:12px;">Se arma sola con cada reserva. Numero de cliente, nombre, telefono y correo.</p>
+      <div id="clientsList"></div>
+    </div>
+  </div>
+</div>
+
 <!-- PANEL (configuracion del negocio) -->
 <div class="section" id="view-panel">
   <div class="eyebrow">Configuracion</div>
@@ -287,12 +341,6 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
     </div>
 
     <button class="btn btn-brand btn-block" onclick="guardarConfig()" style="margin-top:10px;">Guardar configuracion</button>
-  </div>
-
-  <div class="card">
-    <div class="card-title">👥 Base de clientes</div>
-    <p class="hint" style="margin-bottom:12px;">Se arma sola con cada reserva (nombre, telefono, email y numero de cliente). Sirve para promos y seguimiento.</p>
-    <div id="clientsList"></div>
   </div>
 
   <div class="card">
@@ -364,6 +412,7 @@ function initFirebaseListeners() {
     renderAgendaLists();
     renderCaja();
     updateTurnosCount();
+    renderReportes();
   }, function(err){ console.error(err); });
 
   var clientsRef = fb.collection(db, 'clients');
@@ -371,6 +420,7 @@ function initFirebaseListeners() {
     clients = [];
     snap.forEach(function(d){ clients.push(Object.assign({ id: d.id }, d.data())); });
     renderClientsList();
+    renderReportes();
   }, function(err){ console.error(err); });
 }
 
@@ -393,6 +443,15 @@ function showView(id, btn) {
   if (btn) btn.classList.add('active');
   if (id === 'turnos') renderPendientes();
   if (id === 'agenda') renderAgenda();
+  if (id === 'reportes') { initReportesDefaults(); showReportesSub('resumen'); renderReportes(); }
+}
+
+function showReportesSub(sub) {
+  document.getElementById('reportesResumen').style.display = sub === 'resumen' ? 'block' : 'none';
+  document.getElementById('reportesClientes').style.display = sub === 'clientes' ? 'block' : 'none';
+  document.getElementById('subtabResumen').classList.toggle('active', sub === 'resumen');
+  document.getElementById('subtabClientes').classList.toggle('active', sub === 'clientes');
+  if (sub === 'clientes') renderClientsList();
 }
 
 /* ---------- FECHAS ---------- */
@@ -869,6 +928,93 @@ function renderClientsList() {
       '<a class="btn btn-wa btn-sm" href="https://wa.me/' + normalizePhone(c.phone) + '" target="_blank">💬</a>' +
     '</div>';
   }).join('');
+}
+
+/* ---------- REPORTES ---------- */
+function initReportesDefaults() {
+  var f = document.getElementById('repFrom'), t = document.getElementById('repTo');
+  if (!f.value) {
+    var now = new Date();
+    var primero = new Date(now.getFullYear(), now.getMonth(), 1);
+    f.value = fmtISO(primero);
+  }
+  if (!t.value) t.value = fmtISO(new Date());
+}
+
+function renderReportes() {
+  var fromEl = document.getElementById('repFrom'), toEl = document.getElementById('repTo');
+  if (!fromEl || !toEl || !fromEl.value || !toEl.value) return;
+  var from = fromEl.value, to = toEl.value;
+  var enRango = function(d){ return d && d >= from && d <= to; };
+
+  var atendidos = appointments.filter(function(a){ return a.status === 'atendido' && enRango(a.date); });
+  var cancelados = appointments.filter(function(a){ return a.status === 'cancelado' && enRango(a.date); });
+  var facturado = appointments
+    .filter(function(a){ return a.status === 'atendido' && a.paid && enRango(a.paidAt || a.date); })
+    .reduce(function(sum,a){ return sum + (a.price||0); }, 0);
+  var clientesNuevos = clients.filter(function(c){ return enRango(c.createdAt); }).length;
+
+  document.getElementById('repFacturado').textContent = '$ ' + facturado.toLocaleString('es-AR');
+  document.getElementById('repAtendidos').textContent = atendidos.length;
+  document.getElementById('repCancelados').textContent = cancelados.length;
+  document.getElementById('repClientesNuevos').textContent = clientesNuevos;
+
+  renderPorDia(from, to, enRango);
+
+  var itemizado = appointments
+    .filter(function(a){ return a.status === 'atendido' && a.paid && enRango(a.paidAt || a.date); })
+    .sort(function(a,b){
+      var ka = (a.paidAt||a.date) + ' ' + a.time, kb = (b.paidAt||b.date) + ' ' + b.time;
+      return ka.localeCompare(kb);
+    });
+  var wrap = document.getElementById('repDetalleDia');
+  if (!itemizado.length) {
+    wrap.innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>No hay turnos cobrados en este periodo.</p></div>';
+  } else {
+    wrap.innerHTML = itemizado.map(function(a){
+      var day = a.paidAt || a.date;
+      var d = new Date(day + 'T00:00:00');
+      var fechaLabel = DIAS[d.getDay()] + ' ' + d.getDate() + ' ' + MESES[d.getMonth()];
+      return '<div class="client-row">' +
+        '<div><b>' + escapeHtml(a.name) + '</b>' +
+        '<div class="client-meta">' + fechaLabel + ' · ' + a.time + '</div></div>' +
+        '<div class="ticket-price">$ ' + (a.price||0).toLocaleString('es-AR') + '</div>' +
+      '</div>';
+    }).join('');
+  }
+}
+
+function renderPorDia(from, to, enRango) {
+  var wrap = document.getElementById('repPorDia');
+  var inicio = new Date(from + 'T00:00:00');
+  var fin = new Date(to + 'T00:00:00');
+  var totalDias = Math.round((fin - inicio) / 86400000) + 1;
+
+  if (totalDias > 62 || totalDias < 1) {
+    wrap.innerHTML = '<div class="empty-state"><p>El rango elegido es muy amplio para mostrar el detalle diario (maximo ~2 meses). Achica el rango de fechas para verlo.</p></div>';
+    return;
+  }
+
+  var porDia = {};
+  appointments
+    .filter(function(a){ return a.status === 'atendido' && a.paid && enRango(a.paidAt || a.date); })
+    .forEach(function(a){
+      var day = a.paidAt || a.date;
+      porDia[day] = (porDia[day] || 0) + (a.price||0);
+    });
+
+  var filas = '';
+  var d = new Date(inicio);
+  var hoy = fmtISO(new Date());
+  for (var i=0; i<totalDias; i++) {
+    var iso = fmtISO(d);
+    var monto = porDia[iso] || 0;
+    var label = DIAS[d.getDay()] + ' ' + d.getDate() + ' ' + MESES[d.getMonth()] + (iso === hoy ? ' (hoy)' : '');
+    filas += '<div class="client-row"><div><b>' + label + '</b></div>' +
+             '<div class="ticket-price">$ ' + monto.toLocaleString('es-AR') + '</div></div>';
+    d.setDate(d.getDate() + 1);
+  }
+  wrap.innerHTML = filas;
 }
 
 function updateBizHeader() {
