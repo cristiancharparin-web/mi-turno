@@ -46,6 +46,9 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--brand);}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .hint{font-size:12px;color:var(--slate-soft);margin-top:6px;}
+.service-chip{display:flex;align-items:center;justify-content:space-between;background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:9px 12px;margin-top:8px;font-size:13.5px;font-weight:500;}
+.service-chip .remove{background:none;border:none;color:var(--warn);cursor:pointer;font-weight:700;font-size:15px;padding:0 4px;line-height:1;}
+.services-total{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--brand-dark);margin-top:10px;font-size:14.5px;text-align:right;}
 
 /* BUTTONS */
 .btn{border:none;border-radius:var(--radius-sm);padding:12px 20px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:all .15s;}
@@ -169,7 +172,12 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
     <div class="card-title">📝 Tus datos</div>
     <div class="field">
       <label>Servicio</label>
-      <select id="fldService"></select>
+      <div style="display:flex;gap:8px;">
+        <select id="fldService" style="flex:1;"></select>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="agregarServicioSeleccionado()">+ Agregar</button>
+      </div>
+      <div id="selectedServicesList"></div>
+      <p class="hint" id="addMoreHint" style="display:none;">¿Queres agregar otro servicio? Elegilo arriba y toca "+ Agregar" de nuevo.</p>
     </div>
     <div class="field-row">
       <div class="field"><label>Nombre</label><input type="text" id="fldName" placeholder="Ej: Ana Gomez"></div>
@@ -295,6 +303,7 @@ var config = loadConfig();
 var appointments = loadAppointments();
 var selectedDate = null;
 var selectedTime = null;
+var selectedServices = [];
 
 /* ---------- TOAST ---------- */
 function toast(msg) {
@@ -365,6 +374,8 @@ function renderSlots() {
 
 function selectTime(t) {
   selectedTime = t;
+  selectedServices = [];
+  renderSelectedServices();
   renderSlots();
   document.getElementById('bookingFormCard').style.display = 'block';
   document.getElementById('bookingFormCard').scrollIntoView({behavior:'smooth', block:'nearest'});
@@ -381,19 +392,51 @@ function renderServiceOptions() {
   });
 }
 
+function agregarServicioSeleccionado() {
+  var sel = document.getElementById('fldService');
+  var name = sel.value;
+  if (!name) { toast('No hay servicios configurados'); return; }
+  if (selectedServices.some(function(s){ return s.name === name; })) { toast('Ese servicio ya esta agregado'); return; }
+  var svc = (config.services || []).find(function(s){ return s.name === name; });
+  if (!svc) return;
+  selectedServices.push({ name: svc.name, price: svc.price || 0 });
+  renderSelectedServices();
+}
+
+function quitarServicio(i) {
+  selectedServices.splice(i, 1);
+  renderSelectedServices();
+}
+
+function renderSelectedServices() {
+  var wrap = document.getElementById('selectedServicesList');
+  var hint = document.getElementById('addMoreHint');
+  if (!selectedServices.length) { wrap.innerHTML = ''; hint.style.display = 'none'; return; }
+  hint.style.display = 'block';
+  var total = selectedServices.reduce(function(sum,s){ return sum + (s.price||0); }, 0);
+  var html = selectedServices.map(function(s, i){
+    return '<div class="service-chip"><span>' + escapeHtml(s.name) + (s.price ? ' - $' + s.price : '') + '</span>' +
+           '<button type="button" class="remove" onclick="quitarServicio(' + i + ')" title="Quitar">✕</button></div>';
+  }).join('');
+  html += '<div class="services-total">Total: $ ' + total.toLocaleString('es-AR') + '</div>';
+  wrap.innerHTML = html;
+}
+
 function confirmarTurno() {
   var name = document.getElementById('fldName').value.trim();
   var phone = document.getElementById('fldPhone').value.trim();
-  var serviceName = document.getElementById('fldService').value;
-  var serviceObj = (config.services || []).find(function(s){ return s.name === serviceName; }) || {};
+  if (!selectedServices.length) { toast('Agrega al menos un servicio'); return; }
   if (!name || !phone) { toast('Completa nombre y telefono'); return; }
   if (!selectedDate || !selectedTime) { toast('Elegi dia y horario'); return; }
   if (!config.phone) { toast('Este negocio todavia no configuro su WhatsApp'); return; }
 
+  var totalPrice = selectedServices.reduce(function(sum,s){ return sum + (s.price||0); }, 0);
+  var serviceNames = selectedServices.map(function(s){ return s.name; }).join(', ');
+
   var appt = {
     id: 'a' + Date.now(),
     date: selectedDate, time: selectedTime,
-    service: serviceName, price: serviceObj.price || 0, name: name, phone: phone,
+    service: serviceNames, services: selectedServices.slice(), price: totalPrice, name: name, phone: phone,
     status: 'pendiente', paid: false, createdAt: Date.now()
   };
   appointments.push(appt);
@@ -402,8 +445,12 @@ function confirmarTurno() {
 
   var d = new Date(selectedDate + 'T00:00:00');
   var fecha = d.getDate() + ' de ' + MESES[d.getMonth()];
+  var serviciosMsg = selectedServices.map(function(s){
+    return '- ' + s.name + (s.price ? ' ($' + s.price + ')' : '');
+  }).join('%0A');
   var msg = 'Hola! Quiero reservar un turno en ' + config.name + '.%0A' +
-            'Servicio: ' + serviceName + '%0A' +
+            'Servicios:%0A' + serviciosMsg + '%0A' +
+            'Total: $' + totalPrice + '%0A' +
             'Dia: ' + fecha + '%0A' +
             'Hora: ' + selectedTime + '%0A' +
             'Nombre: ' + name;
@@ -413,6 +460,8 @@ function confirmarTurno() {
   toast('Turno reservado, abriendo WhatsApp...');
   document.getElementById('fldName').value = '';
   document.getElementById('fldPhone').value = '';
+  selectedServices = [];
+  renderSelectedServices();
   document.getElementById('bookingFormCard').style.display = 'none';
   selectedTime = null;
   renderSlots();
