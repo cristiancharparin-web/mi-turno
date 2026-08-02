@@ -352,19 +352,31 @@ function selectDate(iso) {
 function timeToMin(t) { var p = t.split(':'); return parseInt(p[0])*60 + parseInt(p[1]); }
 function minToTime(m) { var h = Math.floor(m/60), mm = m%60; return (h<10?'0':'')+h+':'+(mm<10?'0':'')+mm; }
 
+/* Rangos [inicio,fin) en minutos que ya estan ocupados ese dia por otros turnos activos */
+function getOccupiedRanges(date, excludeId) {
+  return appointments
+    .filter(function(a){ return a.date === date && a.status !== 'cancelado' && a.id !== excludeId; })
+    .map(function(a){
+      var s = timeToMin(a.time);
+      var dur = a.durationMin || config.slotMin || 30;
+      return [s, s + dur];
+    });
+}
+function rangesOverlap(aStart, aEnd, bStart, bEnd) { return aStart < bEnd && bStart < aEnd; }
+
 function renderSlots() {
   var grid = document.getElementById('slotGrid');
   grid.innerHTML = '';
   if (!selectedDate) { grid.innerHTML = '<div class="empty-note">Elegi un dia arriba.</div>'; return; }
 
   var start = timeToMin(config.open), end = timeToMin(config.close), step = parseInt(config.slotMin) || 30;
-  var takenTimes = appointments.filter(function(a){ return a.date === selectedDate && a.status !== 'cancelado'; }).map(function(a){ return a.time; });
+  var occupied = getOccupiedRanges(selectedDate);
 
   var any = false;
   for (var m = start; m < end; m += step) {
     any = true;
     var t = minToTime(m);
-    var taken = takenTimes.indexOf(t) !== -1;
+    var taken = occupied.some(function(r){ return m >= r[0] && m < r[1]; });
     var el = document.createElement('div');
     el.className = 'slot' + (taken ? ' taken' : '') + (t === selectedTime ? ' selected' : '');
     el.textContent = t;
@@ -387,44 +399,39 @@ function selectTime(t) {
 /* ---------- FORMULARIO DE RESERVA ---------- */
 function renderServiceOptions() {
   var sel = document.getElementById('fldService');
-  var addBtn = document.getElementById('btnAgregarServicio');
-  var disponibles = (config.services || []).filter(function(s){
-    return !selectedServices.some(function(sel2){ return sel2.name === s.name; });
-  });
   sel.innerHTML = '';
-  if (!disponibles.length) {
+  if (!config.services || !config.services.length) {
     var o = document.createElement('option');
-    o.textContent = (config.services && config.services.length) ? 'Ya agregaste todos los servicios' : 'No hay servicios configurados';
+    o.textContent = 'No hay servicios configurados';
     sel.appendChild(o);
     sel.disabled = true;
-    if (addBtn) addBtn.disabled = true;
     return;
   }
   sel.disabled = false;
-  if (addBtn) addBtn.disabled = false;
-  disponibles.forEach(function(s){
+  config.services.forEach(function(s){
     var o = document.createElement('option');
     o.value = s.name; o.textContent = s.name + ' (' + s.dur + ' min' + (s.price ? ' - $' + s.price : '') + ')';
     sel.appendChild(o);
   });
 }
 
+/* Se puede agregar el mismo servicio varias veces (ej: 3 cortes para 3 personas). Se agrupan con cantidad. */
 function agregarServicioSeleccionado() {
   var sel = document.getElementById('fldService');
   var name = sel.value;
   if (!name) { toast('No hay servicios configurados'); return; }
-  if (selectedServices.some(function(s){ return s.name === name; })) { toast('Ese servicio ya esta agregado'); return; }
   var svc = (config.services || []).find(function(s){ return s.name === name; });
   if (!svc) return;
-  selectedServices.push({ name: svc.name, price: svc.price || 0 });
+  var existente = selectedServices.find(function(s){ return s.name === name; });
+  if (existente) { existente.qty += 1; }
+  else { selectedServices.push({ name: svc.name, price: svc.price || 0, dur: svc.dur || 30, qty: 1 }); }
   renderSelectedServices();
-  renderServiceOptions();
 }
 
 function quitarServicio(i) {
-  selectedServices.splice(i, 1);
+  selectedServices[i].qty -= 1;
+  if (selectedServices[i].qty <= 0) selectedServices.splice(i, 1);
   renderSelectedServices();
-  renderServiceOptions();
 }
 
 function renderSelectedServices() {
@@ -432,12 +439,15 @@ function renderSelectedServices() {
   var hint = document.getElementById('addMoreHint');
   if (!selectedServices.length) { wrap.innerHTML = ''; hint.style.display = 'none'; return; }
   hint.style.display = 'block';
-  var total = selectedServices.reduce(function(sum,s){ return sum + (s.price||0); }, 0);
+  var total = selectedServices.reduce(function(sum,s){ return sum + (s.price||0)*s.qty; }, 0);
+  var totalDur = selectedServices.reduce(function(sum,s){ return sum + (s.dur||30)*s.qty; }, 0);
   var html = selectedServices.map(function(s, i){
-    return '<div class="service-chip"><span>' + escapeHtml(s.name) + (s.price ? ' - $' + s.price : '') + '</span>' +
-           '<button type="button" class="remove" onclick="quitarServicio(' + i + ')" title="Quitar">✕</button></div>';
+    var qtyTag = s.qty > 1 ? ' x' + s.qty : '';
+    var lineTotal = (s.price||0) * s.qty;
+    return '<div class="service-chip"><span>' + escapeHtml(s.name) + qtyTag + (s.price ? ' - $' + lineTotal.toLocaleString('es-AR') : '') + '</span>' +
+           '<button type="button" class="remove" onclick="quitarServicio(' + i + ')" title="Quitar uno">✕</button></div>';
   }).join('');
-  html += '<div class="services-total">Total: $ ' + total.toLocaleString('es-AR') + '</div>';
+  html += '<div class="services-total">Total: $ ' + total.toLocaleString('es-AR') + ' · Duracion estimada: ' + totalDur + ' min</div>';
   wrap.innerHTML = html;
 }
 
@@ -449,13 +459,34 @@ function confirmarTurno() {
   if (!selectedDate || !selectedTime) { toast('Elegi dia y horario'); return; }
   if (!config.phone) { toast('Este negocio todavia no configuro su WhatsApp'); return; }
 
-  var totalPrice = selectedServices.reduce(function(sum,s){ return sum + (s.price||0); }, 0);
-  var serviceNames = selectedServices.map(function(s){ return s.name; }).join(', ');
+  var totalPrice = selectedServices.reduce(function(sum,s){ return sum + (s.price||0)*s.qty; }, 0);
+  var totalDuration = selectedServices.reduce(function(sum,s){ return sum + (s.dur||30)*s.qty; }, 0);
+  var serviceNames = selectedServices.map(function(s){ return s.name + (s.qty>1 ? ' x'+s.qty : ''); }).join(', ');
+
+  /* Verificar que el horario elegido tenga lugar para la duracion total (no se pise con otros turnos ni pase el cierre) */
+  var startMin = timeToMin(selectedTime);
+  var endMin = startMin + totalDuration;
+  var closeMin = timeToMin(config.close);
+  if (endMin > closeMin) {
+    toast('Los servicios elegidos no entran antes del cierre. Elegi menos servicios u otro horario.');
+    return;
+  }
+  var occupied = getOccupiedRanges(selectedDate);
+  var choca = occupied.some(function(r){ return rangesOverlap(startMin, endMin, r[0], r[1]); });
+  if (choca) {
+    toast('Ese horario ya no tiene lugar para todos los servicios elegidos. Elegi menos servicios u otro horario.');
+    return;
+  }
+
+  var servicesExpandidos = [];
+  selectedServices.forEach(function(s){
+    for (var k=0; k<s.qty; k++) servicesExpandidos.push({ name: s.name, price: s.price });
+  });
 
   var appt = {
     id: 'a' + Date.now(),
-    date: selectedDate, time: selectedTime,
-    service: serviceNames, services: selectedServices.slice(), price: totalPrice, name: name, phone: phone,
+    date: selectedDate, time: selectedTime, durationMin: totalDuration,
+    service: serviceNames, services: servicesExpandidos, price: totalPrice, name: name, phone: phone,
     status: 'pendiente', paid: false, createdAt: Date.now()
   };
   appointments.push(appt);
@@ -465,7 +496,8 @@ function confirmarTurno() {
   var d = new Date(selectedDate + 'T00:00:00');
   var fecha = d.getDate() + ' de ' + MESES[d.getMonth()];
   var serviciosMsg = selectedServices.map(function(s){
-    return '- ' + s.name + (s.price ? ' ($' + s.price + ')' : '');
+    var qtyTag = s.qty > 1 ? ' x' + s.qty : '';
+    return '- ' + s.name + qtyTag + (s.price ? ' ($' + ((s.price||0)*s.qty) + ')' : '');
   }).join('%0A');
   var msg = 'Hola! Quiero reservar un turno en ' + config.name + '.%0A' +
             'Servicios:%0A' + serviciosMsg + '%0A' +
@@ -523,8 +555,15 @@ function buildTicketEl(a) {
   actions += '<button class="btn btn-ghost btn-sm" onclick="borrarTurno(\'' + a.id + '\')">Eliminar</button>';
   var serviciosHtml;
   if (a.services && a.services.length) {
-    serviciosHtml = '<div class="ticket-services">' + a.services.map(function(s){
-      return '<span class="ticket-svc-pill">' + escapeHtml(s.name) + (s.price ? ' · $' + s.price.toLocaleString('es-AR') : '') + '</span>';
+    var agrupados = [];
+    a.services.forEach(function(s){
+      var e = agrupados.find(function(g){ return g.name === s.name && g.price === s.price; });
+      if (e) e.qty += 1; else agrupados.push({ name: s.name, price: s.price, qty: 1 });
+    });
+    serviciosHtml = '<div class="ticket-services">' + agrupados.map(function(s){
+      var qtyTag = s.qty > 1 ? ' x' + s.qty : '';
+      var lineTotal = (s.price||0) * s.qty;
+      return '<span class="ticket-svc-pill">' + escapeHtml(s.name) + qtyTag + (s.price ? ' · $' + lineTotal.toLocaleString('es-AR') : '') + '</span>';
     }).join('') + '</div>';
   } else {
     serviciosHtml = '<div class="ticket-service">' + escapeHtml(a.service || '') + '</div>';
