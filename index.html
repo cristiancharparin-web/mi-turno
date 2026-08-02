@@ -174,7 +174,7 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
       <label>Servicio</label>
       <div style="display:flex;gap:8px;">
         <select id="fldService" style="flex:1;"></select>
-        <button type="button" class="btn btn-ghost btn-sm" onclick="agregarServicioSeleccionado()">+ Agregar</button>
+        <button type="button" class="btn btn-ghost btn-sm" id="btnAgregarServicio" onclick="agregarServicioSeleccionado()">+ Agregar</button>
       </div>
       <div id="selectedServicesList"></div>
       <p class="hint" id="addMoreHint" style="display:none;">¿Queres agregar otro servicio? Elegilo arriba y toca "+ Agregar" de nuevo.</p>
@@ -376,6 +376,7 @@ function selectTime(t) {
   selectedTime = t;
   selectedServices = [];
   renderSelectedServices();
+  renderServiceOptions();
   renderSlots();
   document.getElementById('bookingFormCard').style.display = 'block';
   document.getElementById('bookingFormCard').scrollIntoView({behavior:'smooth', block:'nearest'});
@@ -384,8 +385,22 @@ function selectTime(t) {
 /* ---------- FORMULARIO DE RESERVA ---------- */
 function renderServiceOptions() {
   var sel = document.getElementById('fldService');
+  var addBtn = document.getElementById('btnAgregarServicio');
+  var disponibles = (config.services || []).filter(function(s){
+    return !selectedServices.some(function(sel2){ return sel2.name === s.name; });
+  });
   sel.innerHTML = '';
-  (config.services || []).forEach(function(s){
+  if (!disponibles.length) {
+    var o = document.createElement('option');
+    o.textContent = (config.services && config.services.length) ? 'Ya agregaste todos los servicios' : 'No hay servicios configurados';
+    sel.appendChild(o);
+    sel.disabled = true;
+    if (addBtn) addBtn.disabled = true;
+    return;
+  }
+  sel.disabled = false;
+  if (addBtn) addBtn.disabled = false;
+  disponibles.forEach(function(s){
     var o = document.createElement('option');
     o.value = s.name; o.textContent = s.name + ' (' + s.dur + ' min' + (s.price ? ' - $' + s.price : '') + ')';
     sel.appendChild(o);
@@ -401,11 +416,13 @@ function agregarServicioSeleccionado() {
   if (!svc) return;
   selectedServices.push({ name: svc.name, price: svc.price || 0 });
   renderSelectedServices();
+  renderServiceOptions();
 }
 
 function quitarServicio(i) {
   selectedServices.splice(i, 1);
   renderSelectedServices();
+  renderServiceOptions();
 }
 
 function renderSelectedServices() {
@@ -462,6 +479,7 @@ function confirmarTurno() {
   document.getElementById('fldPhone').value = '';
   selectedServices = [];
   renderSelectedServices();
+  renderServiceOptions();
   document.getElementById('bookingFormCard').style.display = 'none';
   selectedTime = null;
   renderSlots();
