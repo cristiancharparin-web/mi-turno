@@ -4,6 +4,29 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MiTurno</title>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-app.js";
+  import {
+    getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
+    onSnapshot, runTransaction
+  } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyDyMLgK3QxDrhCzSGz9YId6VXun720yEcU",
+    authDomain: "mi-turno-d10e6.firebaseapp.com",
+    projectId: "mi-turno-d10e6",
+    storageBucket: "mi-turno-d10e6.firebasestorage.app",
+    messagingSenderId: "99749375306",
+    appId: "1:99749375306:web:f43b0ff4f80ac1fffae5b3"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getFirestore(app);
+
+  window.db = db;
+  window.fb = { collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, runTransaction };
+  window.dispatchEvent(new Event('firebase-ready'));
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
 <style>
 :root{
@@ -49,6 +72,9 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 .service-chip{display:flex;align-items:center;justify-content:space-between;background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:9px 12px;margin-top:8px;font-size:13.5px;font-weight:500;}
 .service-chip .remove{background:none;border:none;color:var(--warn);cursor:pointer;font-weight:700;font-size:15px;padding:0 4px;line-height:1;}
 .services-total{font-family:'IBM Plex Mono',monospace;font-weight:700;color:var(--brand-dark);margin-top:10px;font-size:14.5px;text-align:right;}
+.client-row{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:10px 12px;margin-top:8px;}
+.client-row .client-num{font-family:'IBM Plex Mono',monospace;color:var(--brand-dark);font-weight:700;}
+.client-row .client-meta{font-size:12.5px;color:var(--slate);margin-top:2px;}
 
 /* BUTTONS */
 .btn{border:none;border-radius:var(--radius-sm);padding:12px 20px;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px;transition:all .15s;}
@@ -183,7 +209,12 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
     </div>
     <div class="field-row">
       <div class="field"><label>Nombre</label><input type="text" id="fldName" placeholder="Ej: Ana Gomez"></div>
-      <div class="field"><label>Telefono</label><input type="text" id="fldPhone" placeholder="Ej: 261 555-0000"></div>
+      <div class="field"><label>Telefono</label><input type="text" id="fldPhone" placeholder="Ej: 261 555-0000" oninput="buscarClientePorTelefono()"></div>
+    </div>
+    <div class="field">
+      <label>Email (opcional)</label>
+      <input type="email" id="fldEmail" placeholder="Ej: ana@mail.com">
+      <p class="hint" id="clienteHint" style="display:none;color:var(--brand-dark);font-weight:600;"></p>
     </div>
     <button class="btn btn-wa btn-block" onclick="confirmarTurno()">
       <span>💬</span> Confirmar por WhatsApp
@@ -259,8 +290,14 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
   </div>
 
   <div class="card">
+    <div class="card-title">👥 Base de clientes</div>
+    <p class="hint" style="margin-bottom:12px;">Se arma sola con cada reserva (nombre, telefono, email y numero de cliente). Sirve para promos y seguimiento.</p>
+    <div id="clientsList"></div>
+  </div>
+
+  <div class="card">
     <div class="card-title">⚠️ Zona de riesgo</div>
-    <p class="hint" style="margin-bottom:12px;">Esto borra todos los turnos y la configuracion guardados en este navegador, para empezar de cero.</p>
+    <p class="hint" style="margin-bottom:12px;">Esto borra TODOS los turnos, clientes y la configuracion de la base de datos compartida (afecta a todos los dispositivos), para empezar de cero.</p>
     <button class="btn btn-ghost btn-block" onclick="reiniciarDatos()" style="border-color:var(--warn);color:var(--warn);">Reiniciar todos los datos</button>
   </div>
 </div>
@@ -270,10 +307,11 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 <div class="toast" id="toast"></div>
 
 <script>
-/* ---------- ESTADO / PERSISTENCIA ----------
-   Por ahora todo se guarda en localStorage.
-   Cuando conectes Firebase, reemplazar loadConfig/saveConfig
-   y loadAppointments/saveAppointments por lecturas/escrituras a Firestore. */
+/* ---------- ESTADO / PERSISTENCIA (Firebase Firestore, base compartida) ----------
+   config       -> coleccion 'config', doc 'main'
+   appointments -> coleccion 'appointments'
+   clients      -> coleccion 'clients' (id del doc = telefono normalizado)
+   contador     -> coleccion 'meta', doc 'counters', campo clientNumber */
 
 var DIAS = ['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
 var MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
@@ -289,23 +327,56 @@ var defaultConfig = {
   ]
 };
 
-function loadConfig() {
-  try { return JSON.parse(localStorage.getItem('mt_config')) || defaultConfig; }
-  catch(e){ return defaultConfig; }
-}
-function saveConfigData(cfg) { localStorage.setItem('mt_config', JSON.stringify(cfg)); }
-
-function loadAppointments() {
-  try { return JSON.parse(localStorage.getItem('mt_appointments')) || []; }
-  catch(e){ return []; }
-}
-function saveAppointments(list) { localStorage.setItem('mt_appointments', JSON.stringify(list)); }
-
-var config = loadConfig();
-var appointments = loadAppointments();
+var config = JSON.parse(JSON.stringify(defaultConfig));
+var appointments = [];
+var clients = [];
 var selectedDate = null;
 var selectedTime = null;
 var selectedServices = [];
+var db, fb;
+
+function normalizePhone(p) { return String(p||'').replace(/[^0-9]/g,''); }
+
+function initFirebaseListeners() {
+  db = window.db; fb = window.fb;
+
+  var configRef = fb.doc(db, 'config', 'main');
+  fb.onSnapshot(configRef, function(snap){
+    if (snap.exists()) {
+      config = snap.data();
+      if (!config.services) config.services = [];
+    } else {
+      config = JSON.parse(JSON.stringify(defaultConfig));
+      fb.setDoc(configRef, config).catch(function(e){ console.error(e); });
+    }
+    updateBizHeader();
+    renderServiceOptions();
+    renderSlots();
+    fillConfigForm();
+  }, function(err){ console.error(err); toast('No se pudo conectar con la base de datos'); });
+
+  var apptsRef = fb.collection(db, 'appointments');
+  fb.onSnapshot(apptsRef, function(snap){
+    appointments = [];
+    snap.forEach(function(d){ appointments.push(Object.assign({ id: d.id }, d.data())); });
+    renderSlots();
+    renderPendientes();
+    renderAgendaLists();
+    renderCaja();
+    updateTurnosCount();
+  }, function(err){ console.error(err); });
+
+  var clientsRef = fb.collection(db, 'clients');
+  fb.onSnapshot(clientsRef, function(snap){
+    clients = [];
+    snap.forEach(function(d){ clients.push(Object.assign({ id: d.id }, d.data())); });
+    renderClientsList();
+  }, function(err){ console.error(err); });
+}
+
+function guardarConfigEnDB(cfg) {
+  fb.setDoc(fb.doc(db, 'config', 'main'), cfg).catch(function(e){ console.error(e); toast('Error al guardar la configuracion'); });
+}
 
 /* ---------- TOAST ---------- */
 function toast(msg) {
@@ -451,9 +522,54 @@ function renderSelectedServices() {
   wrap.innerHTML = html;
 }
 
+function buscarClientePorTelefono() {
+  var phoneVal = document.getElementById('fldPhone').value.trim();
+  var norm = normalizePhone(phoneVal);
+  var hint = document.getElementById('clienteHint');
+  if (norm.length < 6) { hint.style.display = 'none'; return; }
+  var c = clients.find(function(cl){ return cl.id === norm; });
+  if (c) {
+    document.getElementById('fldName').value = c.name || '';
+    document.getElementById('fldEmail').value = c.email || '';
+    hint.textContent = '✓ Cliente Nº ' + c.clientNumber + ' reconocido, datos autocompletados.';
+    hint.style.display = 'block';
+  } else {
+    hint.style.display = 'none';
+  }
+}
+
+function getNextClientNumber() {
+  var counterRef = fb.doc(db, 'meta', 'counters');
+  return fb.runTransaction(db, function(tx){
+    return tx.get(counterRef).then(function(snap){
+      var current = (snap.exists() && snap.data().clientNumber) ? snap.data().clientNumber : 0;
+      var next = current + 1;
+      tx.set(counterRef, { clientNumber: next }, { merge: true });
+      return next;
+    });
+  });
+}
+
+function guardarCliente(name, phone, email) {
+  var norm = normalizePhone(phone);
+  var clientRef = fb.doc(db, 'clients', norm);
+  var existente = clients.find(function(c){ return c.id === norm; });
+  var hoy = fmtISO(new Date());
+  if (existente) {
+    return fb.setDoc(clientRef, {
+      name: name, phone: phone, email: email || existente.email || '',
+      clientNumber: existente.clientNumber, createdAt: existente.createdAt || hoy, lastVisit: hoy
+    });
+  }
+  return getNextClientNumber().then(function(num){
+    return fb.setDoc(clientRef, { name: name, phone: phone, email: email || '', clientNumber: num, createdAt: hoy, lastVisit: hoy });
+  });
+}
+
 function confirmarTurno() {
   var name = document.getElementById('fldName').value.trim();
   var phone = document.getElementById('fldPhone').value.trim();
+  var email = document.getElementById('fldEmail').value.trim();
   if (!selectedServices.length) { toast('Agrega al menos un servicio'); return; }
   if (!name || !phone) { toast('Completa nombre y telefono'); return; }
   if (!selectedDate || !selectedTime) { toast('Elegi dia y horario'); return; }
@@ -484,39 +600,45 @@ function confirmarTurno() {
   });
 
   var appt = {
-    id: 'a' + Date.now(),
     date: selectedDate, time: selectedTime, durationMin: totalDuration,
-    service: serviceNames, services: servicesExpandidos, price: totalPrice, name: name, phone: phone,
+    service: serviceNames, services: servicesExpandidos, price: totalPrice,
+    name: name, phone: phone, email: email || '', clientPhone: normalizePhone(phone),
     status: 'pendiente', paid: false, createdAt: Date.now()
   };
-  appointments.push(appt);
-  saveAppointments(appointments);
-  updateTurnosCount();
 
-  var d = new Date(selectedDate + 'T00:00:00');
-  var fecha = d.getDate() + ' de ' + MESES[d.getMonth()];
-  var serviciosMsg = selectedServices.map(function(s){
-    var qtyTag = s.qty > 1 ? ' x' + s.qty : '';
-    return '- ' + s.name + qtyTag + (s.price ? ' ($' + ((s.price||0)*s.qty) + ')' : '');
-  }).join('%0A');
-  var msg = 'Hola! Quiero reservar un turno en ' + config.name + '.%0A' +
-            'Servicios:%0A' + serviciosMsg + '%0A' +
-            'Total: $' + totalPrice + '%0A' +
-            'Dia: ' + fecha + '%0A' +
-            'Hora: ' + selectedTime + '%0A' +
-            'Nombre: ' + name;
-  var url = 'https://wa.me/' + config.phone.replace(/[^0-9]/g,'') + '?text=' + msg;
-  window.open(url, '_blank');
+  guardarCliente(name, phone, email).catch(function(e){ console.error(e); });
 
-  toast('Turno reservado, abriendo WhatsApp...');
-  document.getElementById('fldName').value = '';
-  document.getElementById('fldPhone').value = '';
-  selectedServices = [];
-  renderSelectedServices();
-  renderServiceOptions();
-  document.getElementById('bookingFormCard').style.display = 'none';
-  selectedTime = null;
-  renderSlots();
+  fb.addDoc(fb.collection(db, 'appointments'), appt).then(function(){
+    var d = new Date(selectedDate + 'T00:00:00');
+    var fecha = d.getDate() + ' de ' + MESES[d.getMonth()];
+    var serviciosMsg = selectedServices.map(function(s){
+      var qtyTag = s.qty > 1 ? ' x' + s.qty : '';
+      return '- ' + s.name + qtyTag + (s.price ? ' ($' + ((s.price||0)*s.qty) + ')' : '');
+    }).join('%0A');
+    var msg = 'Hola! Quiero reservar un turno en ' + config.name + '.%0A' +
+              'Servicios:%0A' + serviciosMsg + '%0A' +
+              'Total: $' + totalPrice + '%0A' +
+              'Dia: ' + fecha + '%0A' +
+              'Hora: ' + selectedTime + '%0A' +
+              'Nombre: ' + name;
+    var url = 'https://wa.me/' + config.phone.replace(/[^0-9]/g,'') + '?text=' + msg;
+    window.open(url, '_blank');
+
+    toast('Turno reservado, abriendo WhatsApp...');
+    document.getElementById('fldName').value = '';
+    document.getElementById('fldPhone').value = '';
+    document.getElementById('fldEmail').value = '';
+    document.getElementById('clienteHint').style.display = 'none';
+    selectedServices = [];
+    renderSelectedServices();
+    renderServiceOptions();
+    document.getElementById('bookingFormCard').style.display = 'none';
+    selectedTime = null;
+    renderSlots();
+  }).catch(function(e){
+    console.error(e);
+    toast('No se pudo guardar el turno. Revisa tu conexion.');
+  });
 }
 
 function renderCaja() {
@@ -640,28 +762,43 @@ function renderAgenda() {
 }
 
 function setStatus(id, status) {
-  appointments = appointments.map(function(a){ if (a.id === id) a.status = status; return a; });
-  saveAppointments(appointments); renderPendientes(); renderAgendaLists(); renderSlots(); updateTurnosCount(); renderCaja();
-  toast('Turno ' + status);
+  fb.updateDoc(fb.doc(db, 'appointments', id), { status: status })
+    .then(function(){ toast('Turno ' + status); })
+    .catch(function(e){ console.error(e); toast('Error al actualizar el turno'); });
 }
 
 function confirmarPago(id) {
-  appointments = appointments.map(function(a){ if (a.id === id) { a.paid = true; a.paidAt = fmtISO(new Date()); } return a; });
-  saveAppointments(appointments); renderAgendaLists(); renderCaja();
-  toast('Pago confirmado');
+  fb.updateDoc(fb.doc(db, 'appointments', id), { paid: true, paidAt: fmtISO(new Date()) })
+    .then(function(){ toast('Pago confirmado'); })
+    .catch(function(e){ console.error(e); toast('Error al confirmar el pago'); });
 }
 
 function borrarTurno(id) {
-  appointments = appointments.filter(function(a){ return a.id !== id; });
-  saveAppointments(appointments); renderPendientes(); renderAgendaLists(); renderSlots(); updateTurnosCount(); renderCaja();
-  toast('Turno eliminado');
+  fb.deleteDoc(fb.doc(db, 'appointments', id))
+    .then(function(){ toast('Turno eliminado'); })
+    .catch(function(e){ console.error(e); toast('Error al eliminar el turno'); });
 }
 
 function reiniciarDatos() {
-  if (!confirm('Esto va a borrar todos los turnos y la configuracion guardados en este navegador. Esta accion no se puede deshacer. Confirmas?')) return;
-  localStorage.removeItem('mt_appointments');
-  localStorage.removeItem('mt_config');
-  location.reload();
+  if (!confirm('Esto va a borrar TODOS los turnos, clientes y la configuracion de la base de datos compartida. Afecta a todos los dispositivos conectados y no se puede deshacer. Confirmas?')) return;
+  toast('Reiniciando datos...');
+  Promise.all([
+    fb.getDocs(fb.collection(db, 'appointments')).then(function(snap){
+      return Promise.all(snap.docs.map(function(d){ return fb.deleteDoc(d.ref); }));
+    }),
+    fb.getDocs(fb.collection(db, 'clients')).then(function(snap){
+      return Promise.all(snap.docs.map(function(d){ return fb.deleteDoc(d.ref); }));
+    })
+  ]).then(function(){
+    return Promise.all([
+      fb.setDoc(fb.doc(db, 'config', 'main'), defaultConfig),
+      fb.setDoc(fb.doc(db, 'meta', 'counters'), { clientNumber: 0 })
+    ]);
+  }).then(function(){
+    toast('Datos reiniciados');
+  }).catch(function(e){
+    console.error(e); toast('Error al reiniciar los datos');
+  });
 }
 
 function escapeHtml(s) {
@@ -713,11 +850,25 @@ function guardarConfig() {
   config.open = document.getElementById('cfgOpen').value;
   config.close = document.getElementById('cfgClose').value;
   config.slotMin = parseInt(document.getElementById('cfgSlot').value) || 30;
-  saveConfigData(config);
-  updateBizHeader();
-  renderServiceOptions();
-  renderSlots();
+  guardarConfigEnDB(config);
   toast('Configuracion guardada');
+}
+
+function renderClientsList() {
+  var wrap = document.getElementById('clientsList');
+  if (!wrap) return;
+  if (!clients.length) {
+    wrap.innerHTML = '<div class="empty-state"><div class="icon">👥</div><p>Todavia no hay clientes cargados.</p></div>';
+    return;
+  }
+  var ordenados = clients.slice().sort(function(a,b){ return (a.clientNumber||0) - (b.clientNumber||0); });
+  wrap.innerHTML = ordenados.map(function(c){
+    return '<div class="client-row">' +
+      '<div><span class="client-num">#' + (c.clientNumber||'-') + '</span> <b>' + escapeHtml(c.name||'') + '</b>' +
+      '<div class="client-meta">' + escapeHtml(c.phone||'') + (c.email ? ' · ' + escapeHtml(c.email) : '') + '</div></div>' +
+      '<a class="btn btn-wa btn-sm" href="https://wa.me/' + normalizePhone(c.phone) + '" target="_blank">💬</a>' +
+    '</div>';
+  }).join('');
 }
 
 function updateBizHeader() {
@@ -740,6 +891,11 @@ window.onload = function() {
   fillConfigForm();
   updateTurnosCount();
   renderCaja();
+  if (window.db && window.fb) {
+    initFirebaseListeners();
+  } else {
+    window.addEventListener('firebase-ready', initFirebaseListeners, { once: true });
+  }
 };
 </script>
 </body>
