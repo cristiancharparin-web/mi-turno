@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MiTurno</title>
+<link rel="manifest" id="pwaManifestLink">
+<meta name="theme-color" content="#2B6E64">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="mobile-web-app-capable" content="yes">
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-app.js";
   import {
@@ -241,6 +246,7 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
     <p class="hint" id="gateHint" style="margin-bottom:10px;"></p>
     <button class="btn btn-brand btn-block" id="gateSubmitBtn" onclick="submitGateLogin()">Ingresar</button>
     <button class="gate-link" onclick="olvidoPasswordGate()">Olvidé mi contraseña</button>
+    <button type="button" class="btn btn-ghost btn-block" id="btnInstalarApp" style="display:none;margin-top:16px;" onclick="instalarAppClick()">📲 Instalar el panel en este teléfono</button>
   </div>
 </div>
 
@@ -550,6 +556,81 @@ var db, fb;
    de Firebase Authentication como businessId (1 cuenta = 1 negocio). */
 var currentBusinessId = null;
 
+/* ---------- INSTALAR COMO APP (PWA) ----------
+   Solo tiene sentido en modo cliente: cada negocio comparte este mismo archivo,
+   asi que el manifest (nombre, icono, link de apertura) se arma al vuelo con
+   los datos de SU negocio, para que el icono en el celular del cliente abra
+   directo a SU pagina de reserva. */
+var deferredInstallPrompt = null;
+var esIOS = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
+
+window.addEventListener('beforeinstallprompt', function(e){
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  mostrarBotonInstalar();
+});
+
+window.addEventListener('appinstalled', function(){
+  ocultarBotonInstalar();
+  toast('App instalada');
+});
+
+function mostrarBotonInstalar() {
+  var btn = document.getElementById('btnInstalarApp');
+  if (btn) btn.style.display = 'block';
+}
+function ocultarBotonInstalar() {
+  var btn = document.getElementById('btnInstalarApp');
+  if (btn) btn.style.display = 'none';
+}
+
+function instalarAppClick() {
+  if (deferredInstallPrompt) {
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then(function(){ deferredInstallPrompt = null; });
+  } else if (esIOS) {
+    toast('Toca el boton Compartir de Safari (el cuadrado con la flecha hacia arriba) y elegi "Agregar a pantalla de inicio".');
+  } else {
+    toast('Abri el menu de tu navegador y busca la opcion "Agregar a pantalla de inicio" o "Instalar app".');
+  }
+}
+
+function configurarManifestDinamico() {
+  var nombre, startUrl, letra;
+  if (CLIENT_MODE) {
+    if (!currentBusinessId) return;
+    nombre = (config.name || 'MiTurno') + ' - Reservar turno';
+    letra = (config.name || 'M').trim().charAt(0).toUpperCase() || 'M';
+    startUrl = window.location.origin + window.location.pathname + '?cliente=1&negocio=' + encodeURIComponent(currentBusinessId);
+  } else {
+    nombre = 'MiTurno - Panel del negocio';
+    letra = 'M';
+    startUrl = window.location.origin + window.location.pathname;
+  }
+  var iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" rx="40" fill="#2B6E64"/>' +
+    '<text x="100" y="134" font-family="Georgia, serif" font-size="110" fill="#F5F2EA" text-anchor="middle">' + letra + '</text></svg>';
+  var iconUri = 'data:image/svg+xml,' + encodeURIComponent(iconSvg);
+  var manifest = {
+    name: nombre,
+    short_name: nombre.substring(0, 12),
+    start_url: startUrl,
+    scope: window.location.origin + window.location.pathname,
+    display: 'standalone',
+    background_color: '#F5F2EA',
+    theme_color: '#2B6E64',
+    icons: [
+      { src: iconUri, sizes: '192x192', type: 'image/svg+xml' },
+      { src: iconUri, sizes: '512x512', type: 'image/svg+xml' }
+    ]
+  };
+  var blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+  var url = URL.createObjectURL(blob);
+  var link = document.getElementById('pwaManifestLink');
+  if (link) link.setAttribute('href', url);
+  document.title = nombre;
+  if (esIOS) mostrarBotonInstalar();
+}
+
 function refNegocio() { return fb.doc(db, 'businesses/' + currentBusinessId); }
 function refAppointments() { return fb.collection(db, 'businesses/' + currentBusinessId + '/appointments'); }
 function refAppointment(id) { return fb.doc(db, 'businesses/' + currentBusinessId + '/appointments/' + id); }
@@ -577,6 +658,7 @@ function initNegocioListeners(adminMode) {
     renderServiceOptions();
     renderSlots();
     if (adminMode) fillConfigForm();
+    else configurarManifestDinamico();
   }, function(err){ console.error(err); toast('No se pudo conectar con la base de datos'); });
 
   fb.onSnapshot(refAppointments(), function(snap){
@@ -1583,11 +1665,18 @@ function arrancarApp() {
     currentBusinessId = CLIENT_NEGOCIO_ID;
     showView('reservar', null);
     initNegocioListeners(false);
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(function(e){ console.error('Service worker:', e); });
+    }
   } else {
     /* Modo negocio: se oculta todo detras del gate de bienvenida hasta loguearse */
     document.querySelector('header').style.display = 'none';
     document.querySelector('main').style.display = 'none';
     mostrarGateAuth();
+    configurarManifestDinamico();
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('sw.js').catch(function(e){ console.error('Service worker:', e); });
+    }
   }
 }
 
