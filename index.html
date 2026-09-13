@@ -28,6 +28,7 @@
   window.dispatchEvent(new Event('firebase-ready'));
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 :root{
   --paper:#F5F2EA; --paper-dim:#EDE8DA;
@@ -155,6 +156,10 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:12px 22px;border-radius:100px;font-size:13.5px;font-weight:500;z-index:200;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .25s;}
 .toast.show{opacity:1;}
 
+/* LOGIN DEL NEGOCIO */
+.modal-overlay{position:fixed;inset:0;background:rgba(32,36,47,0.6);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;}
+.modal-box{background:#fff;border-radius:var(--radius);padding:24px;max-width:360px;width:100%;box-shadow:var(--shadow);}
+
 @media(max-width:600px){
   header{flex-direction:column;align-items:flex-start;height:auto;padding:10px 14px;gap:8px;}
   .brand{font-size:18px;}
@@ -174,6 +179,17 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
   .svc-row input{min-width:110px;}
   .date-chip{min-width:50px;}
 }
+
+/* IMPRESION: solo se ve el contenido del reporte activo */
+@media print {
+  header, .subtabs, .no-print, .toast, .date-row { display:none !important; }
+  body{background:#fff;}
+  main{max-width:100%;padding:0;margin:0;}
+  .card, .kpi-card{box-shadow:none;border:1px solid #ccc;break-inside:avoid;}
+  .kpi-grid, .client-row{break-inside:avoid;}
+  .section{display:none !important;}
+  .section.active{display:block !important;}
+}
 </style>
 </head>
 <body>
@@ -181,11 +197,11 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 <header>
   <div class="brand">📅 Mi<b>Turno</b></div>
   <div class="view-toggle">
-    <button class="active" onclick="showView('reservar',this)">Reservar</button>
-    <button onclick="showView('turnos',this)">Turnos a confirmar</button>
-    <button onclick="showView('agenda',this)">Agenda diaria</button>
-    <button onclick="showView('reportes',this)">Reportes</button>
-    <button onclick="showView('panel',this)">Panel</button>
+    <button class="active" onclick="guardVista('reservar',this)">Reservar</button>
+    <button onclick="guardVista('turnos',this)">Turnos a confirmar</button>
+    <button onclick="guardVista('agenda',this)">Agenda diaria</button>
+    <button onclick="guardVista('reportes',this)">Reportes</button>
+    <button onclick="guardVista('panel',this)">Panel</button>
   </div>
 </header>
 
@@ -277,11 +293,14 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
   <p class="subtitle">Resumen del negocio y base de clientes.</p>
 
   <div class="subtabs">
-    <button class="active" id="subtabResumen" onclick="showReportesSub('resumen')">Resumen</button>
+    <button class="active" id="subtabResumen" onclick="showReportesSub('resumen')">Facturado</button>
     <button id="subtabClientes" onclick="showReportesSub('clientes')">Clientes</button>
   </div>
 
   <div id="reportesResumen">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+      <button class="btn btn-ghost btn-sm no-print" onclick="imprimirReporte()">🖨️ Imprimir reporte</button>
+    </div>
     <div class="card">
       <div class="field-row">
         <div class="field"><label>Desde</label><input type="date" id="repFrom" onchange="renderReportes()"></div>
@@ -308,6 +327,9 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
   </div>
 
   <div id="reportesClientes" style="display:none;">
+    <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
+      <button class="btn btn-ghost btn-sm no-print" onclick="imprimirReporte()">🖨️ Imprimir reporte</button>
+    </div>
     <div class="card">
       <div class="card-title">👥 Base de clientes</div>
       <p class="hint" style="margin-bottom:12px;">Se arma sola con cada reserva. Numero de cliente, nombre, telefono y correo.</p>
@@ -344,6 +366,31 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
   </div>
 
   <div class="card">
+    <div class="card-title">🔗 Link y QR para tus clientes</div>
+    <p class="hint" style="margin-bottom:14px;">Compartilo en tus redes o imprimilo en el local. Al tocarlo o escanearlo, el cliente abre WhatsApp directo para pedir su turno.</p>
+    <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;">
+      <div id="waQrCode" style="background:#fff;padding:10px;border:1.5px solid var(--line);border-radius:var(--radius-sm);min-width:180px;min-height:180px;display:flex;align-items:center;justify-content:center;"></div>
+      <div style="flex:1;min-width:200px;">
+        <p id="waLinkText" style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;word-break:break-all;background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:10px;margin-bottom:10px;">Configura el WhatsApp del negocio arriba y guarda para generar el link.</p>
+        <button class="btn btn-ghost btn-sm" onclick="copiarWaLink()">📋 Copiar link</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">🔐 Acceso del negocio</div>
+    <p class="hint" style="margin-bottom:14px;">Esta contraseña protege Turnos, Agenda, Reportes y este Panel. Los clientes solo ven la pantalla de Reservar, sin necesidad de contraseña.</p>
+    <div class="field">
+      <label>Cambiar contraseña</label>
+      <input type="password" id="cfgNewPassword" placeholder="Nueva contraseña (min. 4 caracteres)">
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-ghost btn-sm" onclick="cambiarPasswordAdmin()">Cambiar contraseña</button>
+      <button class="btn btn-ghost btn-sm" onclick="cerrarSesionAdmin()">Cerrar sesion</button>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="card-title">⚠️ Zona de riesgo</div>
     <p class="hint" style="margin-bottom:12px;">Esto borra TODOS los turnos, clientes y la configuracion de la base de datos compartida (afecta a todos los dispositivos), para empezar de cero.</p>
     <button class="btn btn-ghost btn-block" onclick="reiniciarDatos()" style="border-color:var(--warn);color:var(--warn);">Reiniciar todos los datos</button>
@@ -351,6 +398,21 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 </div>
 
 </main>
+
+<div class="modal-overlay" id="adminLoginOverlay" style="display:none;">
+  <div class="modal-box">
+    <div class="card-title" id="loginModalTitle">🔒 Acceso del negocio</div>
+    <div class="field">
+      <label>Contraseña</label>
+      <input type="password" id="loginPasswordInput" placeholder="Ingresa la contraseña" onkeydown="if(event.key==='Enter'){document.getElementById('loginSubmitBtn').click();}">
+    </div>
+    <p class="hint" id="loginModalHint"></p>
+    <div style="display:flex;gap:8px;margin-top:14px;">
+      <button class="btn btn-brand" style="flex:1;" id="loginSubmitBtn">Ingresar</button>
+      <button class="btn btn-ghost" onclick="closeLoginModal()">Cancelar</button>
+    </div>
+  </div>
+</div>
 
 <div class="toast" id="toast"></div>
 
@@ -383,6 +445,11 @@ var selectedTime = null;
 var selectedServices = [];
 var db, fb;
 
+/* ---------- LOGIN DEL NEGOCIO ---------- */
+var isAdminAuthed = false;
+var configLoaded = false;
+var pendingView = null, pendingBtn = null;
+
 function normalizePhone(p) { return String(p||'').replace(/[^0-9]/g,''); }
 
 function initFirebaseListeners() {
@@ -396,6 +463,12 @@ function initFirebaseListeners() {
     } else {
       config = JSON.parse(JSON.stringify(defaultConfig));
       fb.setDoc(configRef, config).catch(function(e){ console.error(e); });
+    }
+    configLoaded = true;
+    if (config.adminPassword) {
+      try {
+        if (localStorage.getItem('miturno_admin_authed') === 'yes') isAdminAuthed = true;
+      } catch(e){}
     }
     updateBizHeader();
     renderServiceOptions();
@@ -446,6 +519,83 @@ function showView(id, btn) {
   if (id === 'reportes') { initReportesDefaults(); showReportesSub('resumen'); renderReportes(); }
 }
 
+/* La vista "reservar" es publica. Las demas piden contraseña del negocio. */
+function guardVista(id, btn) {
+  if (id === 'reservar') { showView(id, btn); return; }
+  if (!configLoaded) { toast('Cargando datos, espera un segundo...'); return; }
+  if (isAdminAuthed) { showView(id, btn); return; }
+  pendingView = id; pendingBtn = btn;
+  openLoginModal();
+}
+
+function openLoginModal() {
+  var overlay = document.getElementById('adminLoginOverlay');
+  var title = document.getElementById('loginModalTitle');
+  var hint = document.getElementById('loginModalHint');
+  var input = document.getElementById('loginPasswordInput');
+  var submitBtn = document.getElementById('loginSubmitBtn');
+  input.value = '';
+  if (!config.adminPassword) {
+    title.textContent = '🔒 Crear contraseña de acceso';
+    hint.textContent = 'Todavia no configuraste una contraseña para el negocio. Elegi una (minimo 4 caracteres); despues la podes cambiar desde el Panel.';
+    submitBtn.textContent = 'Crear y entrar';
+    submitBtn.onclick = submitSetPassword;
+  } else {
+    title.textContent = '🔒 Acceso del negocio';
+    hint.textContent = 'Ingresa la contraseña para ver turnos, agenda, reportes y configuracion.';
+    submitBtn.textContent = 'Ingresar';
+    submitBtn.onclick = submitLogin;
+  }
+  overlay.style.display = 'flex';
+  input.focus();
+}
+
+function closeLoginModal() {
+  document.getElementById('adminLoginOverlay').style.display = 'none';
+  pendingView = null; pendingBtn = null;
+}
+
+function submitSetPassword() {
+  var pass = document.getElementById('loginPasswordInput').value;
+  if (!pass || pass.length < 4) { toast('La contraseña debe tener al menos 4 caracteres'); return; }
+  config.adminPassword = pass;
+  guardarConfigEnDB(config);
+  finishLogin();
+}
+
+function submitLogin() {
+  var pass = document.getElementById('loginPasswordInput').value;
+  if (pass !== config.adminPassword) { toast('Contraseña incorrecta'); return; }
+  finishLogin();
+}
+
+function finishLogin() {
+  isAdminAuthed = true;
+  try { localStorage.setItem('miturno_admin_authed', 'yes'); } catch(e){}
+  document.getElementById('adminLoginOverlay').style.display = 'none';
+  var id = pendingView, btn = pendingBtn;
+  pendingView = null; pendingBtn = null;
+  if (id) showView(id, btn);
+  toast('Acceso concedido');
+}
+
+function cerrarSesionAdmin() {
+  isAdminAuthed = false;
+  try { localStorage.removeItem('miturno_admin_authed'); } catch(e){}
+  toast('Sesion cerrada');
+  showView('reservar', document.querySelector('.view-toggle button'));
+}
+
+function cambiarPasswordAdmin() {
+  var input = document.getElementById('cfgNewPassword');
+  var pass = input.value;
+  if (!pass || pass.length < 4) { toast('La contraseña debe tener al menos 4 caracteres'); return; }
+  config.adminPassword = pass;
+  guardarConfigEnDB(config);
+  input.value = '';
+  toast('Contraseña actualizada');
+}
+
 function showReportesSub(sub) {
   document.getElementById('reportesResumen').style.display = sub === 'resumen' ? 'block' : 'none';
   document.getElementById('reportesClientes').style.display = sub === 'clientes' ? 'block' : 'none';
@@ -454,8 +604,20 @@ function showReportesSub(sub) {
   if (sub === 'clientes') renderClientsList();
 }
 
+function imprimirReporte() {
+  window.print();
+}
+
 /* ---------- FECHAS ---------- */
-function fmtISO(d) { return d.toISOString().split('T')[0]; }
+/* Ojo: NO usar d.toISOString() aca, porque convierte a UTC y en Argentina (UTC-3)
+   eso hace que despues de las 21:00 hs ya muestre la fecha de manana. Se arma
+   el string a partir de los componentes locales de la fecha. */
+function fmtISO(d) {
+  var y = d.getFullYear();
+  var m = String(d.getMonth() + 1).padStart(2, '0');
+  var day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
 
 function renderDateRow() {
   var row = document.getElementById('dateRow');
@@ -673,14 +835,14 @@ function confirmarTurno() {
     var serviciosMsg = selectedServices.map(function(s){
       var qtyTag = s.qty > 1 ? ' x' + s.qty : '';
       return '- ' + s.name + qtyTag + (s.price ? ' ($' + ((s.price||0)*s.qty) + ')' : '');
-    }).join('%0A');
-    var msg = 'Hola! Quiero reservar un turno en ' + config.name + '.%0A' +
-              'Servicios:%0A' + serviciosMsg + '%0A' +
-              'Total: $' + totalPrice + '%0A' +
-              'Dia: ' + fecha + '%0A' +
-              'Hora: ' + selectedTime + '%0A' +
+    }).join('\n');
+    var msg = 'Hola! Quiero reservar un turno en ' + config.name + '.\n' +
+              'Servicios:\n' + serviciosMsg + '\n' +
+              'Total: $' + totalPrice + '\n' +
+              'Dia: ' + fecha + '\n' +
+              'Hora: ' + selectedTime + '\n' +
               'Nombre: ' + name;
-    var url = 'https://wa.me/' + config.phone.replace(/[^0-9]/g,'') + '?text=' + msg;
+    var url = 'https://wa.me/' + config.phone.replace(/[^0-9]/g,'') + '?text=' + encodeURIComponent(msg);
     window.open(url, '_blank');
 
     toast('Turno reservado, abriendo WhatsApp...');
@@ -901,6 +1063,35 @@ function fillConfigForm() {
   document.getElementById('cfgClose').value = config.close || '18:00';
   document.getElementById('cfgSlot').value = config.slotMin || 30;
   renderServiceRows();
+  renderWhatsAppLink();
+}
+
+function renderWhatsAppLink() {
+  var linkEl = document.getElementById('waLinkText');
+  var qrWrap = document.getElementById('waQrCode');
+  if (!linkEl || !qrWrap) return;
+  var phone = normalizePhone(config.phone);
+  qrWrap.innerHTML = '';
+  if (!phone) {
+    linkEl.textContent = 'Configura el WhatsApp del negocio arriba y guarda para generar el link.';
+    return;
+  }
+  var msg = 'Hola! Quiero reservar un turno en ' + (config.name || 'tu negocio') + '.';
+  var url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg);
+  linkEl.textContent = url;
+  if (window.QRCode) {
+    new QRCode(qrWrap, { text: url, width: 180, height: 180, colorDark: '#20242F', colorLight: '#ffffff' });
+  } else {
+    qrWrap.innerHTML = '<span class="hint">No se pudo cargar el generador de QR.</span>';
+  }
+}
+
+function copiarWaLink() {
+  var text = document.getElementById('waLinkText').textContent;
+  if (!text || text.indexOf('wa.me') === -1) { toast('Primero configura el WhatsApp del negocio'); return; }
+  navigator.clipboard.writeText(text)
+    .then(function(){ toast('Link copiado'); })
+    .catch(function(){ toast('No se pudo copiar, seleccionalo a mano'); });
 }
 
 function guardarConfig() {
