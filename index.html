@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MiTurno</title>
-<link rel="manifest" id="pwaManifestLink">
+<link rel="manifest" id="pwaManifestLink" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
 <meta name="theme-color" content="#2B6E64">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -618,17 +619,17 @@ function generarIconoPNG(letra) {
 }
 
 function configurarManifestDinamico() {
-  var nombre, startUrl, letra;
-  if (CLIENT_MODE) {
-    if (!currentBusinessId) return;
-    nombre = (config.name || 'MiTurno') + ' - Reservar turno';
-    letra = (config.name || 'M').trim().charAt(0).toUpperCase() || 'M';
-    startUrl = window.location.origin + window.location.pathname + '?cliente=1&negocio=' + encodeURIComponent(currentBusinessId);
-  } else {
-    nombre = 'MiTurno - Panel del negocio';
-    letra = 'M';
-    startUrl = window.location.origin + window.location.pathname;
+  /* Modo negocio: usa el manifest.json fijo del archivo (mejor soporte de
+     instalacion real en Android), no hace falta generar nada aca. */
+  if (!CLIENT_MODE) {
+    document.title = 'MiTurno - Panel del negocio';
+    if (esIOS) mostrarBotonInstalar();
+    return;
   }
+  if (!currentBusinessId) return;
+  var nombre = (config.name || 'MiTurno') + ' - Reservar turno';
+  var letra = (config.name || 'M').trim().charAt(0).toUpperCase() || 'M';
+  var startUrl = window.location.origin + window.location.pathname + '?cliente=1&negocio=' + encodeURIComponent(currentBusinessId);
   var iconUri = generarIconoPNG(letra);
   var carpeta = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
   var manifest = {
