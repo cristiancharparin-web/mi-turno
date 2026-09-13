@@ -31,7 +31,7 @@
      codigo del navegador -- no es el secreto. Reemplazalo por el tuyo de
      developer.paypal.com > Apps & Credentials > (tu app sandbox) > Client ID.
      Cuando pases a produccion, lo cambias por el Client ID de tu app "Live". */
-  window.PAYPAL_CLIENT_ID_PUBLIC = "AaaG3dpSnVRsB2umxMUS3uP_52yEt3umqUlwnNsGKRfWu8U0awkQ5sa6d6pgUYMjTntzlchq5e6Wlweb";
+  window.PAYPAL_CLIENT_ID_PUBLIC = "SANDBOX-CLIENT-ID-AQUI";
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
@@ -92,6 +92,7 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 .field label{display:block;font-size:12px;font-weight:600;color:var(--slate);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.04em;}
 .field input,.field select,.field textarea{width:100%;padding:11px 13px;border:1.5px solid var(--line);border-radius:var(--radius-sm);font-family:'IBM Plex Sans',sans-serif;font-size:14.5px;background:var(--paper);color:var(--ink);}
 .field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--brand);}
+.field input[readonly]{background:var(--paper-dim);color:var(--slate);cursor:not-allowed;}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
 .hint{font-size:12px;color:var(--slate-soft);margin-top:6px;}
 .service-chip{display:flex;align-items:center;justify-content:space-between;background:var(--paper);border:1.5px solid var(--line);border-radius:var(--radius-sm);padding:9px 12px;margin-top:8px;font-size:13.5px;font-weight:500;}
@@ -274,40 +275,50 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 <!-- RESERVAR (vista del cliente) -->
 <div class="section active" id="view-reservar">
   <div class="eyebrow" id="bizEyebrow">Reservar turno</div>
-  <h1 id="bizTitle">Elegí día y horario</h1>
-  <p class="subtitle" id="bizSubtitle">Se completa en menos de un minuto.</p>
+  <h1 id="bizTitle">Reservá tu turno</h1>
+  <p class="subtitle" id="bizSubtitle">Primero contanos tu teléfono.</p>
 
-  <div class="date-row" id="dateRow"></div>
+  <div class="card" id="phoneGateCard">
+    <div class="card-title">📱 Tu teléfono</div>
+    <div class="field">
+      <label>Telefono (con código de país, sin +)</label>
+      <input type="text" id="fldPhone" placeholder="Ej: 5492615550000" oninput="onPhoneInputInicial()">
+      <p class="hint">Escribí el código de tu país seguido de tu número, sin espacios ni el signo +.</p>
+    </div>
+    <p class="hint" id="clienteHint" style="display:none;color:var(--brand-dark);font-weight:600;"></p>
+    <button type="button" class="gate-link" id="btnCambiarDatosCliente" style="display:none;" onclick="desbloquearDatosCliente()">¿No sos vos? Cambiar datos</button>
 
-  <div class="card">
-    <div class="card-title">🕐 Horarios disponibles</div>
-    <div class="slot-grid" id="slotGrid"></div>
+    <div id="nuevoClienteFields" style="display:none;margin-top:14px;">
+      <div class="field"><label>Nombre</label><input type="text" id="fldName" placeholder="Ej: Ana Gomez"></div>
+      <div class="field"><label>Email (opcional)</label><input type="email" id="fldEmail" placeholder="Ej: ana@mail.com"></div>
+      <button type="button" class="btn btn-brand btn-block" onclick="continuarComoNuevoCliente()">Continuar</button>
+    </div>
   </div>
 
-  <div class="card" id="bookingFormCard" style="display:none;">
-    <div class="card-title">📝 Tus datos</div>
-    <div class="field">
-      <label>Servicio</label>
-      <div style="display:flex;gap:8px;">
-        <select id="fldService" style="flex:1;"></select>
-        <button type="button" class="btn btn-ghost btn-sm" id="btnAgregarServicio" onclick="agregarServicioSeleccionado()">+ Agregar</button>
+  <div id="restoDelFlujo" style="display:none;">
+    <div class="date-row" id="dateRow"></div>
+
+    <div class="card">
+      <div class="card-title">🕐 Horarios disponibles</div>
+      <div class="slot-grid" id="slotGrid"></div>
+    </div>
+
+    <div class="card" id="bookingFormCard" style="display:none;">
+      <div class="card-title">📝 Confirmar turno</div>
+      <div class="field">
+        <label>Servicio</label>
+        <div style="display:flex;gap:8px;">
+          <select id="fldService" style="flex:1;"></select>
+          <button type="button" class="btn btn-ghost btn-sm" id="btnAgregarServicio" onclick="agregarServicioSeleccionado()">+ Agregar</button>
+        </div>
+        <div id="selectedServicesList"></div>
+        <p class="hint" id="addMoreHint" style="display:none;">¿Queres agregar otro servicio? Elegilo arriba y toca "+ Agregar" de nuevo.</p>
       </div>
-      <div id="selectedServicesList"></div>
-      <p class="hint" id="addMoreHint" style="display:none;">¿Queres agregar otro servicio? Elegilo arriba y toca "+ Agregar" de nuevo.</p>
+      <button class="btn btn-wa btn-block" onclick="confirmarTurno()">
+        <span>💬</span> Confirmar por WhatsApp
+      </button>
+      <p class="hint">Se abre WhatsApp con el mensaje ya armado. El turno queda como "pendiente" hasta que el negocio lo confirme.</p>
     </div>
-    <div class="field-row">
-      <div class="field"><label>Nombre</label><input type="text" id="fldName" placeholder="Ej: Ana Gomez"></div>
-      <div class="field"><label>Telefono</label><input type="text" id="fldPhone" placeholder="Ej: 261 555-0000" oninput="buscarClientePorTelefono()"></div>
-    </div>
-    <div class="field">
-      <label>Email (opcional)</label>
-      <input type="email" id="fldEmail" placeholder="Ej: ana@mail.com">
-      <p class="hint" id="clienteHint" style="display:none;color:var(--brand-dark);font-weight:600;"></p>
-    </div>
-    <button class="btn btn-wa btn-block" onclick="confirmarTurno()">
-      <span>💬</span> Confirmar por WhatsApp
-    </button>
-    <p class="hint">Se abre WhatsApp con el mensaje ya armado. El turno queda como "pendiente" hasta que el negocio lo confirme.</p>
   </div>
 </div>
 
@@ -1008,20 +1019,54 @@ function renderSelectedServices() {
   wrap.innerHTML = html;
 }
 
-function buscarClientePorTelefono() {
+function onPhoneInputInicial() {
   var phoneVal = document.getElementById('fldPhone').value.trim();
   var norm = normalizePhone(phoneVal);
   var hint = document.getElementById('clienteHint');
-  if (norm.length < 6) { hint.style.display = 'none'; return; }
+  var btnCambiar = document.getElementById('btnCambiarDatosCliente');
+  var nuevoWrap = document.getElementById('nuevoClienteFields');
+  var resto = document.getElementById('restoDelFlujo');
+  var nameField = document.getElementById('fldName');
+  var emailField = document.getElementById('fldEmail');
+
+  if (norm.length < 8) {
+    hint.style.display = 'none';
+    btnCambiar.style.display = 'none';
+    nuevoWrap.style.display = 'none';
+    resto.style.display = 'none';
+    return;
+  }
   var c = clients.find(function(cl){ return cl.id === norm; });
   if (c) {
-    document.getElementById('fldName').value = c.name || '';
-    document.getElementById('fldEmail').value = c.email || '';
-    hint.textContent = '✓ Cliente Nº ' + c.clientNumber + ' reconocido, datos autocompletados.';
+    nameField.value = c.name || '';
+    emailField.value = c.email || '';
+    hint.textContent = '¡Hola de nuevo, ' + (c.name || 'cliente') + '! (Cliente Nº ' + c.clientNumber + ')';
     hint.style.display = 'block';
+    btnCambiar.style.display = 'inline-block';
+    nuevoWrap.style.display = 'none';
+    resto.style.display = 'block';
   } else {
     hint.style.display = 'none';
+    btnCambiar.style.display = 'none';
+    nuevoWrap.style.display = 'block';
+    resto.style.display = 'none';
+    nameField.value = '';
+    emailField.value = '';
   }
+}
+
+function continuarComoNuevoCliente() {
+  var name = document.getElementById('fldName').value.trim();
+  if (!name) { toast('Escribi tu nombre para continuar'); return; }
+  document.getElementById('restoDelFlujo').style.display = 'block';
+  document.getElementById('restoDelFlujo').scrollIntoView({behavior:'smooth', block:'start'});
+}
+
+function desbloquearDatosCliente() {
+  document.getElementById('nuevoClienteFields').style.display = 'block';
+  document.getElementById('restoDelFlujo').style.display = 'none';
+  document.getElementById('clienteHint').textContent = 'Vas a actualizar tus datos guardados. Tocá "Continuar" cuando termines.';
+  document.getElementById('btnCambiarDatosCliente').style.display = 'none';
 }
 
 function getNextClientNumber() {
@@ -1115,6 +1160,9 @@ function confirmarTurno() {
     document.getElementById('fldPhone').value = '';
     document.getElementById('fldEmail').value = '';
     document.getElementById('clienteHint').style.display = 'none';
+    document.getElementById('btnCambiarDatosCliente').style.display = 'none';
+    document.getElementById('nuevoClienteFields').style.display = 'none';
+    document.getElementById('restoDelFlujo').style.display = 'none';
     selectedServices = [];
     renderSelectedServices();
     renderServiceOptions();
