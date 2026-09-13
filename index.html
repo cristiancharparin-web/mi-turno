@@ -163,7 +163,7 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 .empty-state{text-align:center;padding:50px 20px;color:var(--slate);}
 .empty-state .icon{font-size:36px;margin-bottom:10px;}
 
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:12px 22px;border-radius:100px;font-size:13.5px;font-weight:500;z-index:200;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .25s;}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:12px 22px;border-radius:100px;font-size:13.5px;font-weight:500;z-index:500;box-shadow:var(--shadow);opacity:0;pointer-events:none;transition:opacity .25s;}
 .toast.show{opacity:1;}
 
 /* LOGIN DEL NEGOCIO */
@@ -239,7 +239,10 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
     <h1>Un paso mas</h1>
     <p class="hint" style="margin-bottom:20px;">Tu cuenta ya esta creada. Para activarla falta completar el pago de la suscripcion. En cuanto lo acreditemos, tu panel se habilita solo.</p>
     <div id="gatePaypalBox" class="hint" style="margin-bottom:16px;padding:14px;border:1.5px dashed var(--line);border-radius:var(--radius-sm);">
-      El pago con PayPal se conecta en el proximo paso.
+      El pago con PayPal se conecta en el proximo paso.<br>
+      Mientras tanto (modo prueba): en Firestore, coleccion <b>businesses</b>, documento
+      <code id="gateBusinessIdText" style="font-family:'IBM Plex Mono',monospace;word-break:break-all;">-</code>,
+      cambia el campo <b>paid</b> a <b>true</b>.
     </div>
     <button class="btn btn-ghost btn-block" onclick="revisarPagoGate()">Ya pague, revisar de nuevo</button>
     <button class="gate-link" onclick="cerrarSesionAdmin()">Cerrar sesion</button>
@@ -672,6 +675,7 @@ function mostrarGateAuth() {
 function mostrarGatePago() {
   document.getElementById('gateAuth').style.display = 'none';
   document.getElementById('gatePago').style.display = 'flex';
+  document.getElementById('gateBusinessIdText').textContent = currentBusinessId || '-';
 }
 
 function ocultarGates() {
