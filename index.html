@@ -196,12 +196,12 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 
 <header>
   <div class="brand">📅 Mi<b>Turno</b></div>
-  <div class="view-toggle">
-    <button class="active" onclick="guardVista('reservar',this)">Reservar</button>
-    <button onclick="guardVista('turnos',this)">Turnos a confirmar</button>
-    <button onclick="guardVista('agenda',this)">Agenda diaria</button>
-    <button onclick="guardVista('reportes',this)">Reportes</button>
-    <button onclick="guardVista('panel',this)">Panel</button>
+  <div class="view-toggle" id="viewToggle">
+    <button class="active" id="btnReservar" onclick="guardVista('reservar',this)">Reservar</button>
+    <button id="btnTurnos" onclick="guardVista('turnos',this)">Turnos a confirmar</button>
+    <button id="btnAgenda" onclick="guardVista('agenda',this)">Agenda diaria</button>
+    <button id="btnReportes" onclick="guardVista('reportes',this)">Reportes</button>
+    <button id="btnPanel" onclick="guardVista('panel',this)">Panel</button>
   </div>
 </header>
 
@@ -367,7 +367,7 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 
   <div class="card">
     <div class="card-title">🔗 Link y QR para tus clientes</div>
-    <p class="hint" style="margin-bottom:14px;">Compartilo en tus redes o imprimilo en el local. Al tocarlo o escanearlo, el cliente abre WhatsApp directo para pedir su turno.</p>
+    <p class="hint" style="margin-bottom:14px;">Compartilo en tus redes o imprimilo en el local. Al tocarlo o escanearlo, el cliente entra a la pantalla de reserva (elige día, horario y servicio) y al confirmar se le abre WhatsApp con el pedido ya armado, para avisarte.</p>
     <div style="display:flex;gap:20px;flex-wrap:wrap;align-items:flex-start;">
       <div id="waQrCode" style="background:#fff;padding:10px;border:1.5px solid var(--line);border-radius:var(--radius-sm);min-width:180px;min-height:180px;display:flex;align-items:center;justify-content:center;"></div>
       <div style="flex:1;min-width:200px;">
@@ -423,6 +423,25 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
    clients      -> coleccion 'clients' (id del doc = telefono normalizado)
    contador     -> coleccion 'meta', doc 'counters', campo clientNumber */
 
+/* ---------- MODO CLIENTE vs MODO NEGOCIO ----------
+   Si la URL tiene ?cliente=1, se muestra SOLO la pantalla de Reservar,
+   sin pestañas ni forma de llegar al panel del negocio.
+   Sin ese parametro, es el modo interno del negocio: no se ve "Reservar"
+   entre las pestañas (esa pantalla es para los clientes, no para el dueño). */
+var CLIENT_MODE = /(^|[?&])cliente=1(&|$)/.test(window.location.search);
+
+function setupModo() {
+  var toggle = document.getElementById('viewToggle');
+  if (CLIENT_MODE) {
+    if (toggle) toggle.style.display = 'none';
+    showView('reservar', null);
+  } else {
+    var btnReservar = document.getElementById('btnReservar');
+    if (btnReservar) btnReservar.style.display = 'none';
+    document.getElementById('view-reservar').classList.remove('active');
+  }
+}
+
 var DIAS = ['Dom','Lun','Mar','Mie','Jue','Vie','Sab'];
 var MESES = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
@@ -449,6 +468,7 @@ var db, fb;
 var isAdminAuthed = false;
 var configLoaded = false;
 var pendingView = null, pendingBtn = null;
+var primerCargaConfig = true;
 
 function normalizePhone(p) { return String(p||'').replace(/[^0-9]/g,''); }
 
@@ -474,6 +494,10 @@ function initFirebaseListeners() {
     renderServiceOptions();
     renderSlots();
     fillConfigForm();
+    if (primerCargaConfig && !CLIENT_MODE) {
+      primerCargaConfig = false;
+      guardVista('turnos', document.getElementById('btnTurnos'));
+    }
   }, function(err){ console.error(err); toast('No se pudo conectar con la base de datos'); });
 
   var apptsRef = fb.collection(db, 'appointments');
@@ -583,7 +607,11 @@ function cerrarSesionAdmin() {
   isAdminAuthed = false;
   try { localStorage.removeItem('miturno_admin_authed'); } catch(e){}
   toast('Sesion cerrada');
-  showView('reservar', document.querySelector('.view-toggle button'));
+  if (CLIENT_MODE) {
+    showView('reservar', null);
+  } else {
+    guardVista('turnos', document.getElementById('btnTurnos'));
+  }
 }
 
 function cambiarPasswordAdmin() {
@@ -1076,8 +1104,8 @@ function renderWhatsAppLink() {
     linkEl.textContent = 'Configura el WhatsApp del negocio arriba y guarda para generar el link.';
     return;
   }
-  var msg = 'Hola! Quiero reservar un turno en ' + (config.name || 'tu negocio') + '.';
-  var url = 'https://wa.me/' + phone + '?text=' + encodeURIComponent(msg);
+  var base = window.location.origin + window.location.pathname;
+  var url = base + '?cliente=1';
   linkEl.textContent = url;
   if (window.QRCode) {
     new QRCode(qrWrap, { text: url, width: 180, height: 180, colorDark: '#20242F', colorLight: '#ffffff' });
@@ -1088,7 +1116,7 @@ function renderWhatsAppLink() {
 
 function copiarWaLink() {
   var text = document.getElementById('waLinkText').textContent;
-  if (!text || text.indexOf('wa.me') === -1) { toast('Primero configura el WhatsApp del negocio'); return; }
+  if (!text || text.indexOf('cliente=1') === -1) { toast('Primero configura el WhatsApp del negocio'); return; }
   navigator.clipboard.writeText(text)
     .then(function(){ toast('Link copiado'); })
     .catch(function(){ toast('No se pudo copiar, seleccionalo a mano'); });
@@ -1221,6 +1249,7 @@ function updateTurnosCount() {
 
 /* ---------- INIT ---------- */
 window.onload = function() {
+  setupModo();
   updateBizHeader();
   renderDateRow();
   renderServiceOptions();
