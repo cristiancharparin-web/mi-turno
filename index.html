@@ -14,6 +14,9 @@
     getAuth, setPersistence, inMemoryPersistence, signInWithEmailAndPassword,
     createUserWithEmailAndPassword, updatePassword, signOut, sendPasswordResetEmail
   } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
+  import {
+    getFunctions, httpsCallable
+  } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-functions.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDyMLgK3QxDrhCzSGz9YId6VXun720yEcU",
@@ -24,9 +27,16 @@
     appId: "1:99749375306:web:f43b0ff4f80ac1fffae5b3"
   };
 
+  /* ID de cliente PUBLICO de tu app de PayPal (Sandbox). Esto SI puede ir en el
+     codigo del navegador -- no es el secreto. Reemplazalo por el tuyo de
+     developer.paypal.com > Apps & Credentials > (tu app sandbox) > Client ID.
+     Cuando pases a produccion, lo cambias por el Client ID de tu app "Live". */
+  window.PAYPAL_CLIENT_ID_PUBLIC = "SANDBOX-CLIENT-ID-AQUI";
+
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
   const auth = getAuth(app);
+  const functions = getFunctions(app);
   /* Persistencia "en memoria": al recargar o volver a abrir la pagina, la sesion
      se pierde y hay que loguearse de nuevo (es lo que pediste). */
   setPersistence(auth, inMemoryPersistence).catch(function(e){ console.error(e); });
@@ -35,6 +45,7 @@
   window.fb = { collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, runTransaction };
   window.auth = auth;
   window.fbAuth = { signInWithEmailAndPassword, createUserWithEmailAndPassword, updatePassword, signOut, sendPasswordResetEmail };
+  window.fbFunctions = { httpsCallable: function(name){ return httpsCallable(functions, name); } };
   window.dispatchEvent(new Event('firebase-ready'));
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -238,11 +249,9 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
     <div class="brand">📅 Mi<b>Turno</b></div>
     <h1>Un paso mas</h1>
     <p class="hint" style="margin-bottom:20px;">Tu cuenta ya esta creada. Para activarla falta completar el pago de la suscripcion. En cuanto lo acreditemos, tu panel se habilita solo.</p>
-    <div id="gatePaypalBox" class="hint" style="margin-bottom:16px;padding:14px;border:1.5px dashed var(--line);border-radius:var(--radius-sm);">
-      El pago con PayPal se conecta en el proximo paso.<br>
-      Mientras tanto (modo prueba): en Firestore, coleccion <b>businesses</b>, documento
-      <code id="gateBusinessIdText" style="font-family:'IBM Plex Mono',monospace;word-break:break-all;">-</code>,
-      cambia el campo <b>paid</b> a <b>true</b>.
+    <div id="gatePaypalBox" class="hint" style="margin-bottom:16px;">
+      <div id="paypal-button-container"></div>
+      <p class="hint" style="margin-top:10px;font-size:11.5px;">Pago de prueba (sandbox) mientras se termina de configurar.</p>
     </div>
     <button class="btn btn-ghost btn-block" onclick="revisarPagoGate()">Ya pague, revisar de nuevo</button>
     <button class="gate-link" onclick="cerrarSesionAdmin()">Cerrar sesion</button>
@@ -675,12 +684,55 @@ function mostrarGateAuth() {
 function mostrarGatePago() {
   document.getElementById('gateAuth').style.display = 'none';
   document.getElementById('gatePago').style.display = 'flex';
-  document.getElementById('gateBusinessIdText').textContent = currentBusinessId || '-';
+  cargarBotonPaypal();
 }
 
 function ocultarGates() {
   document.getElementById('gateAuth').style.display = 'none';
   document.getElementById('gatePago').style.display = 'none';
+}
+
+/* ---------- PAGO CON PAYPAL ---------- */
+var paypalSdkCargado = false;
+
+function cargarBotonPaypal() {
+  if (paypalSdkCargado) { renderBotonPaypal(); return; }
+  var script = document.createElement('script');
+  script.src = 'https://www.paypal.com/sdk/js?client-id=' + encodeURIComponent(window.PAYPAL_CLIENT_ID_PUBLIC) + '&currency=USD&intent=capture';
+  script.onload = function(){ paypalSdkCargado = true; renderBotonPaypal(); };
+  script.onerror = function(){ toast('No se pudo cargar PayPal, revisa tu conexion'); };
+  document.head.appendChild(script);
+}
+
+function renderBotonPaypal() {
+  var wrap = document.getElementById('paypal-button-container');
+  if (!wrap || !window.paypal) return;
+  wrap.innerHTML = '';
+  window.paypal.Buttons({
+    createOrder: function() {
+      var crearOrden = window.fbFunctions.httpsCallable('createOrder');
+      return crearOrden().then(function(res){ return res.data.orderId; }).catch(function(e){
+        console.error(e);
+        toast('No se pudo iniciar el pago');
+        throw e;
+      });
+    },
+    onApprove: function(data) {
+      toast('Confirmando el pago...');
+      var capturarOrden = window.fbFunctions.httpsCallable('captureOrder');
+      return capturarOrden({ orderId: data.orderID }).then(function(){
+        toast('Pago confirmado, activando tu cuenta...');
+        resolverAccesoNegocio(currentBusinessId);
+      }).catch(function(e){
+        console.error(e);
+        toast('El pago no se pudo validar. Si te descontaron, escribinos.');
+      });
+    },
+    onError: function(e) {
+      console.error(e);
+      toast('Hubo un error con PayPal, intenta de nuevo');
+    }
+  }).render('#paypal-button-container');
 }
 
 function submitGateLogin() {
