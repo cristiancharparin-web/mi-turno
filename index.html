@@ -595,6 +595,28 @@ function instalarAppClick() {
   }
 }
 
+function generarIconoPNG(letra) {
+  var canvas = document.createElement('canvas');
+  canvas.width = 512; canvas.height = 512;
+  var ctx = canvas.getContext('2d');
+  var r = 100;
+  ctx.fillStyle = '#2B6E64';
+  ctx.beginPath();
+  ctx.moveTo(r, 0);
+  ctx.arcTo(512, 0, 512, 512, r);
+  ctx.arcTo(512, 512, 0, 512, r);
+  ctx.arcTo(0, 512, 0, 0, r);
+  ctx.arcTo(0, 0, 512, 0, r);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = '#F5F2EA';
+  ctx.font = '700 300px Georgia, serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(letra, 256, 290);
+  return canvas.toDataURL('image/png');
+}
+
 function configurarManifestDinamico() {
   var nombre, startUrl, letra;
   if (CLIENT_MODE) {
@@ -607,20 +629,19 @@ function configurarManifestDinamico() {
     letra = 'M';
     startUrl = window.location.origin + window.location.pathname;
   }
-  var iconSvg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" rx="40" fill="#2B6E64"/>' +
-    '<text x="100" y="134" font-family="Georgia, serif" font-size="110" fill="#F5F2EA" text-anchor="middle">' + letra + '</text></svg>';
-  var iconUri = 'data:image/svg+xml,' + encodeURIComponent(iconSvg);
+  var iconUri = generarIconoPNG(letra);
+  var carpeta = window.location.pathname.substring(0, window.location.pathname.lastIndexOf('/') + 1);
   var manifest = {
     name: nombre,
     short_name: nombre.substring(0, 12),
     start_url: startUrl,
-    scope: window.location.origin + window.location.pathname,
+    scope: window.location.origin + carpeta,
     display: 'standalone',
     background_color: '#F5F2EA',
     theme_color: '#2B6E64',
     icons: [
-      { src: iconUri, sizes: '192x192', type: 'image/svg+xml' },
-      { src: iconUri, sizes: '512x512', type: 'image/svg+xml' }
+      { src: iconUri, sizes: '192x192', type: 'image/png' },
+      { src: iconUri, sizes: '512x512', type: 'image/png' }
     ]
   };
   var blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
