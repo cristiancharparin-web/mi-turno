@@ -10,6 +10,10 @@
     getFirestore, collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc,
     onSnapshot, runTransaction
   } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
+  import {
+    getAuth, setPersistence, inMemoryPersistence, signInWithEmailAndPassword,
+    createUserWithEmailAndPassword, updatePassword, signOut
+  } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyDyMLgK3QxDrhCzSGz9YId6VXun720yEcU",
@@ -22,9 +26,15 @@
 
   const app = initializeApp(firebaseConfig);
   const db = getFirestore(app);
+  const auth = getAuth(app);
+  /* Persistencia "en memoria": al recargar o volver a abrir la pagina, la sesion
+     se pierde y hay que loguearse de nuevo (es lo que pediste). */
+  setPersistence(auth, inMemoryPersistence).catch(function(e){ console.error(e); });
 
   window.db = db;
   window.fb = { collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, runTransaction };
+  window.auth = auth;
+  window.fbAuth = { signInWithEmailAndPassword, createUserWithEmailAndPassword, updatePassword, signOut };
   window.dispatchEvent(new Event('firebase-ready'));
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -382,7 +392,7 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
     <p class="hint" style="margin-bottom:14px;">Esta contraseña protege Turnos, Agenda, Reportes y este Panel. Los clientes solo ven la pantalla de Reservar, sin necesidad de contraseña.</p>
     <div class="field">
       <label>Cambiar contraseña</label>
-      <input type="password" id="cfgNewPassword" placeholder="Nueva contraseña (min. 4 caracteres)">
+      <input type="password" id="cfgNewPassword" placeholder="Nueva contraseña (min. 6 caracteres)">
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
       <button class="btn btn-ghost btn-sm" onclick="cambiarPasswordAdmin()">Cambiar contraseña</button>
@@ -402,6 +412,10 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 <div class="modal-overlay" id="adminLoginOverlay" style="display:none;">
   <div class="modal-box">
     <div class="card-title" id="loginModalTitle">🔒 Acceso del negocio</div>
+    <div class="field" id="loginEmailField" style="display:none;">
+      <label>Tu email (para recuperar el acceso si hace falta)</label>
+      <input type="email" id="loginEmailInput" placeholder="tuemail@ejemplo.com">
+    </div>
     <div class="field">
       <label>Contraseña</label>
       <input type="password" id="loginPasswordInput" placeholder="Ingresa la contraseña" onkeydown="if(event.key==='Enter'){document.getElementById('loginSubmitBtn').click();}">
@@ -553,17 +567,22 @@ function openLoginModal() {
   var overlay = document.getElementById('adminLoginOverlay');
   var title = document.getElementById('loginModalTitle');
   var hint = document.getElementById('loginModalHint');
+  var emailField = document.getElementById('loginEmailField');
+  var emailInput = document.getElementById('loginEmailInput');
   var input = document.getElementById('loginPasswordInput');
   var submitBtn = document.getElementById('loginSubmitBtn');
   input.value = '';
-  if (!config.adminPassword) {
-    title.textContent = '🔒 Crear contraseña de acceso';
-    hint.textContent = 'Todavia no configuraste una contraseña para el negocio. Elegi una (minimo 4 caracteres); despues la podes cambiar desde el Panel.';
+  emailInput.value = '';
+  if (!config.adminEmail) {
+    title.textContent = '🔒 Crear acceso del negocio';
+    hint.textContent = 'Todavia no configuraste el acceso. Carga tu email y una contraseña (minimo 6 caracteres); despues la podes cambiar desde el Panel.';
+    emailField.style.display = 'block';
     submitBtn.textContent = 'Crear y entrar';
-    submitBtn.onclick = submitSetPassword;
+    submitBtn.onclick = submitCrearAdmin;
   } else {
     title.textContent = '🔒 Acceso del negocio';
     hint.textContent = 'Ingresa la contraseña para ver turnos, agenda, reportes y configuracion.';
+    emailField.style.display = 'none';
     submitBtn.textContent = 'Ingresar';
     submitBtn.onclick = submitLogin;
   }
@@ -576,18 +595,35 @@ function closeLoginModal() {
   pendingView = null; pendingBtn = null;
 }
 
-function submitSetPassword() {
+/* Primera vez: crea un usuario real en Firebase Authentication (no un texto en la base) */
+function submitCrearAdmin() {
+  var email = document.getElementById('loginEmailInput').value.trim();
   var pass = document.getElementById('loginPasswordInput').value;
-  if (!pass || pass.length < 4) { toast('La contraseña debe tener al menos 4 caracteres'); return; }
-  config.adminPassword = pass;
-  guardarConfigEnDB(config);
-  finishLogin();
+  if (!email || email.indexOf('@') === -1) { toast('Ingresa un email valido'); return; }
+  if (!pass || pass.length < 6) { toast('La contraseña debe tener al menos 6 caracteres'); return; }
+  window.fbAuth.createUserWithEmailAndPassword(window.auth, email, pass).then(function(){
+    config.adminEmail = email;
+    guardarConfigEnDB(config);
+    finishLogin();
+  }).catch(function(e){
+    console.error(e);
+    if (e.code === 'auth/email-already-in-use') {
+      toast('Ese email ya tiene una cuenta. Si la creaste vos antes, usa esa contraseña.');
+    } else {
+      toast('No se pudo crear el acceso (' + (e.code || 'error') + ')');
+    }
+  });
 }
 
 function submitLogin() {
   var pass = document.getElementById('loginPasswordInput').value;
-  if (pass !== config.adminPassword) { toast('Contraseña incorrecta'); return; }
-  finishLogin();
+  if (!pass) { toast('Ingresa la contraseña'); return; }
+  window.fbAuth.signInWithEmailAndPassword(window.auth, config.adminEmail, pass).then(function(){
+    finishLogin();
+  }).catch(function(e){
+    console.error(e);
+    toast('Contraseña incorrecta');
+  });
 }
 
 function finishLogin() {
@@ -601,6 +637,7 @@ function finishLogin() {
 
 function cerrarSesionAdmin() {
   isAdminAuthed = false;
+  if (window.auth) { window.fbAuth.signOut(window.auth).catch(function(e){ console.error(e); }); }
   toast('Sesion cerrada');
   if (CLIENT_MODE) {
     showView('reservar', null);
@@ -612,11 +649,15 @@ function cerrarSesionAdmin() {
 function cambiarPasswordAdmin() {
   var input = document.getElementById('cfgNewPassword');
   var pass = input.value;
-  if (!pass || pass.length < 4) { toast('La contraseña debe tener al menos 4 caracteres'); return; }
-  config.adminPassword = pass;
-  guardarConfigEnDB(config);
-  input.value = '';
-  toast('Contraseña actualizada');
+  if (!pass || pass.length < 6) { toast('La contraseña debe tener al menos 6 caracteres'); return; }
+  if (!window.auth || !window.auth.currentUser) { toast('Volve a entrar con tu contraseña actual antes de cambiarla'); return; }
+  window.fbAuth.updatePassword(window.auth.currentUser, pass).then(function(){
+    input.value = '';
+    toast('Contraseña actualizada');
+  }).catch(function(e){
+    console.error(e);
+    toast('No se pudo cambiar la contraseña (' + (e.code || 'error') + ')');
+  });
 }
 
 function showReportesSub(sub) {
