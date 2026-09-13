@@ -695,24 +695,37 @@ function submitGateLogin() {
       nuevoNegocio.createdAt = Date.now();
       return fb.setDoc(refNegocio(), nuevoNegocio).then(function(){
         config = nuevoNegocio;
+        toast('Cuenta creada correctamente');
+        limpiarFormularioGate();
         mostrarGatePago();
       });
     }).catch(function(e){
       console.error(e);
       if (e.code === 'auth/email-already-in-use') {
-        toast('Ese email ya tiene una cuenta. Toca "Ingresar" en vez de "Crear cuenta".');
+        toast('Cuenta existente: ya hay un negocio registrado con ese email');
+        cambiarTabGate('login');
+        document.getElementById('gateHint').textContent = 'Ya existe una cuenta con ese email. Ingresa tu contraseña para entrar.';
+        document.getElementById('gatePassword').value = '';
+        document.getElementById('gateEmail').value = email;
       } else {
         toast('No se pudo crear la cuenta (' + (e.code || 'error') + ')');
       }
     });
   } else {
     window.fbAuth.signInWithEmailAndPassword(window.auth, email, pass).then(function(cred){
+      limpiarFormularioGate();
       resolverAccesoNegocio(cred.user.uid);
     }).catch(function(e){
       console.error(e);
       toast('Email o contraseña incorrectos');
+      document.getElementById('gatePassword').value = '';
     });
   }
+}
+
+function limpiarFormularioGate() {
+  document.getElementById('gateEmail').value = '';
+  document.getElementById('gatePassword').value = '';
 }
 
 /* Revisa si el negocio de este usuario ya esta pagado; si lo esta, entra a la app */
