@@ -485,11 +485,6 @@ function initFirebaseListeners() {
       fb.setDoc(configRef, config).catch(function(e){ console.error(e); });
     }
     configLoaded = true;
-    if (config.adminPassword) {
-      try {
-        if (localStorage.getItem('miturno_admin_authed') === 'yes') isAdminAuthed = true;
-      } catch(e){}
-    }
     updateBizHeader();
     renderServiceOptions();
     renderSlots();
@@ -543,11 +538,13 @@ function showView(id, btn) {
   if (id === 'reportes') { initReportesDefaults(); showReportesSub('resumen'); renderReportes(); }
 }
 
-/* La vista "reservar" es publica. Las demas piden contraseña del negocio. */
+/* La vista "reservar" es publica. Las demas piden contraseña del negocio.
+   "Panel" la pide siempre, aunque ya estes logueado en otras pestañas,
+   porque ahi esta el cambio de contraseña y el borrado de datos. */
 function guardVista(id, btn) {
   if (id === 'reservar') { showView(id, btn); return; }
   if (!configLoaded) { toast('Cargando datos, espera un segundo...'); return; }
-  if (isAdminAuthed) { showView(id, btn); return; }
+  if (id !== 'panel' && isAdminAuthed) { showView(id, btn); return; }
   pendingView = id; pendingBtn = btn;
   openLoginModal();
 }
@@ -595,7 +592,6 @@ function submitLogin() {
 
 function finishLogin() {
   isAdminAuthed = true;
-  try { localStorage.setItem('miturno_admin_authed', 'yes'); } catch(e){}
   document.getElementById('adminLoginOverlay').style.display = 'none';
   var id = pendingView, btn = pendingBtn;
   pendingView = null; pendingBtn = null;
@@ -605,7 +601,6 @@ function finishLogin() {
 
 function cerrarSesionAdmin() {
   isAdminAuthed = false;
-  try { localStorage.removeItem('miturno_admin_authed'); } catch(e){}
   toast('Sesion cerrada');
   if (CLIENT_MODE) {
     showView('reservar', null);
