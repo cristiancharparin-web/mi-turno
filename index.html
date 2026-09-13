@@ -12,7 +12,7 @@
   } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-firestore.js";
   import {
     getAuth, setPersistence, inMemoryPersistence, signInWithEmailAndPassword,
-    createUserWithEmailAndPassword, updatePassword, signOut
+    createUserWithEmailAndPassword, updatePassword, signOut, sendPasswordResetEmail
   } from "https://www.gstatic.com/firebasejs/12.17.0/firebase-auth.js";
 
   const firebaseConfig = {
@@ -34,7 +34,7 @@
   window.db = db;
   window.fb = { collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc, deleteDoc, onSnapshot, runTransaction };
   window.auth = auth;
-  window.fbAuth = { signInWithEmailAndPassword, createUserWithEmailAndPassword, updatePassword, signOut };
+  window.fbAuth = { signInWithEmailAndPassword, createUserWithEmailAndPassword, updatePassword, signOut, sendPasswordResetEmail };
   window.dispatchEvent(new Event('firebase-ready'));
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -170,6 +170,17 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 .modal-overlay{position:fixed;inset:0;background:rgba(32,36,47,0.6);display:flex;align-items:center;justify-content:center;z-index:300;padding:20px;}
 .modal-box{background:#fff;border-radius:var(--radius);padding:24px;max-width:360px;width:100%;box-shadow:var(--shadow);}
 
+/* PANTALLA DE BIENVENIDA / PAGO (full screen) */
+.gate-screen{position:fixed;inset:0;background:var(--paper);z-index:400;display:flex;align-items:center;justify-content:center;padding:24px;overflow-y:auto;}
+.gate-box{max-width:400px;width:100%;background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:32px 28px;box-shadow:var(--shadow);text-align:center;}
+.gate-box .brand{font-size:26px;margin-bottom:6px;justify-content:center;display:flex;}
+.gate-box h1{font-size:26px;margin:6px 0 18px;}
+.gate-box .field{text-align:left;}
+.gate-tabs{display:flex;gap:2px;background:var(--paper-dim);border:1px solid var(--line);border-radius:100px;padding:3px;margin-bottom:20px;}
+.gate-tabs button{flex:1;background:none;border:none;color:var(--slate);font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:600;padding:9px 10px;border-radius:100px;cursor:pointer;}
+.gate-tabs button.active{background:var(--ink);color:var(--paper);}
+.gate-link{background:none;border:none;color:var(--brand);font-size:12.5px;cursor:pointer;text-decoration:underline;margin-top:12px;}
+
 @media(max-width:600px){
   header{flex-direction:column;align-items:flex-start;height:auto;padding:10px 14px;gap:8px;}
   .brand{font-size:18px;}
@@ -203,6 +214,37 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 </style>
 </head>
 <body>
+
+<!-- BIENVENIDA / LOGIN / REGISTRO (solo modo negocio) -->
+<div class="gate-screen" id="gateAuth" style="display:none;">
+  <div class="gate-box">
+    <div class="brand">📅 Mi<b>Turno</b></div>
+    <h1>Bienvenido</h1>
+    <div class="gate-tabs">
+      <button class="active" id="gateTabLogin" onclick="cambiarTabGate('login')">Ingresar</button>
+      <button id="gateTabSignup" onclick="cambiarTabGate('signup')">Crear cuenta</button>
+    </div>
+    <div class="field"><label>Email</label><input type="email" id="gateEmail" placeholder="tuemail@ejemplo.com"></div>
+    <div class="field"><label>Contraseña</label><input type="password" id="gatePassword" placeholder="Minimo 6 caracteres" onkeydown="if(event.key==='Enter'){document.getElementById('gateSubmitBtn').click();}"></div>
+    <p class="hint" id="gateHint" style="margin-bottom:10px;"></p>
+    <button class="btn btn-brand btn-block" id="gateSubmitBtn" onclick="submitGateLogin()">Ingresar</button>
+    <button class="gate-link" onclick="olvidoPasswordGate()">Olvidé mi contraseña</button>
+  </div>
+</div>
+
+<!-- PAGO PENDIENTE (cuenta creada pero todavia no activada) -->
+<div class="gate-screen" id="gatePago" style="display:none;">
+  <div class="gate-box">
+    <div class="brand">📅 Mi<b>Turno</b></div>
+    <h1>Un paso mas</h1>
+    <p class="hint" style="margin-bottom:20px;">Tu cuenta ya esta creada. Para activarla falta completar el pago de la suscripcion. En cuanto lo acreditemos, tu panel se habilita solo.</p>
+    <div id="gatePaypalBox" class="hint" style="margin-bottom:16px;padding:14px;border:1.5px dashed var(--line);border-radius:var(--radius-sm);">
+      El pago con PayPal se conecta en el proximo paso.
+    </div>
+    <button class="btn btn-ghost btn-block" onclick="revisarPagoGate()">Ya pague, revisar de nuevo</button>
+    <button class="gate-link" onclick="cerrarSesionAdmin()">Cerrar sesion</button>
+  </div>
+</div>
 
 <header>
   <div class="brand">📅 Mi<b>Turno</b></div>
@@ -389,7 +431,7 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 
   <div class="card">
     <div class="card-title">🔐 Acceso del negocio</div>
-    <p class="hint" style="margin-bottom:14px;">Esta contraseña protege Turnos, Agenda, Reportes y este Panel. Los clientes solo ven la pantalla de Reservar, sin necesidad de contraseña.</p>
+    <p class="hint" style="margin-bottom:14px;">Tu email y contraseña protegen Turnos, Agenda, Reportes y este Panel. Los clientes solo ven la pantalla de Reservar, sin necesidad de login.</p>
     <div class="field">
       <label>Cambiar contraseña</label>
       <input type="password" id="cfgNewPassword" placeholder="Nueva contraseña (min. 6 caracteres)">
@@ -401,8 +443,14 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
   </div>
 
   <div class="card">
+    <div class="card-title">📦 Importar datos del sistema anterior</div>
+    <p class="hint" style="margin-bottom:12px;">Si venis de la version anterior de MiTurno (antes de las cuentas por negocio), usa esto una sola vez para traer tus turnos, clientes y configuracion a esta cuenta nueva.</p>
+    <button class="btn btn-ghost btn-sm" onclick="migrarDatosViejos()">Importar datos anteriores</button>
+  </div>
+
+  <div class="card">
     <div class="card-title">⚠️ Zona de riesgo</div>
-    <p class="hint" style="margin-bottom:12px;">Esto borra TODOS los turnos, clientes y la configuracion de la base de datos compartida (afecta a todos los dispositivos), para empezar de cero.</p>
+    <p class="hint" style="margin-bottom:12px;">Esto borra TODOS los turnos y clientes de tu negocio, para empezar de cero. No afecta tu cuenta ni tu login.</p>
     <button class="btn btn-ghost btn-block" onclick="reiniciarDatos()" style="border-color:var(--warn);color:var(--warn);">Reiniciar todos los datos</button>
   </div>
 </div>
@@ -411,18 +459,14 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
 
 <div class="modal-overlay" id="adminLoginOverlay" style="display:none;">
   <div class="modal-box">
-    <div class="card-title" id="loginModalTitle">🔒 Acceso del negocio</div>
-    <div class="field" id="loginEmailField" style="display:none;">
-      <label>Tu email (para recuperar el acceso si hace falta)</label>
-      <input type="email" id="loginEmailInput" placeholder="tuemail@ejemplo.com">
-    </div>
+    <div class="card-title">🔒 Confirma tu acceso</div>
     <div class="field">
       <label>Contraseña</label>
       <input type="password" id="loginPasswordInput" placeholder="Ingresa la contraseña" onkeydown="if(event.key==='Enter'){document.getElementById('loginSubmitBtn').click();}">
     </div>
-    <p class="hint" id="loginModalHint"></p>
+    <p class="hint" id="loginModalHint">Panel pide confirmar la contraseña cada vez que entras, por seguridad.</p>
     <div style="display:flex;gap:8px;margin-top:14px;">
-      <button class="btn btn-brand" style="flex:1;" id="loginSubmitBtn">Ingresar</button>
+      <button class="btn btn-brand" style="flex:1;" id="loginSubmitBtn" onclick="submitReauthPanel()">Ingresar</button>
       <button class="btn btn-ghost" onclick="closeLoginModal()">Cancelar</button>
     </div>
   </div>
@@ -438,17 +482,17 @@ h1{font-family:'Instrument Serif',serif;font-size:34px;font-weight:400;margin-bo
    contador     -> coleccion 'meta', doc 'counters', campo clientNumber */
 
 /* ---------- MODO CLIENTE vs MODO NEGOCIO ----------
-   Si la URL tiene ?cliente=1, se muestra SOLO la pantalla de Reservar,
-   sin pestañas ni forma de llegar al panel del negocio.
-   Sin ese parametro, es el modo interno del negocio: no se ve "Reservar"
-   entre las pestañas (esa pantalla es para los clientes, no para el dueño). */
+   Si la URL tiene ?cliente=1&negocio=ID, se muestra SOLO la pantalla de Reservar
+   para ESE negocio, sin pestañas ni forma de llegar al panel.
+   Sin esos parametros, es el modo interno del negocio: pide login y no se ve
+   "Reservar" entre las pestañas (esa pantalla es para los clientes). */
 var CLIENT_MODE = /(^|[?&])cliente=1(&|$)/.test(window.location.search);
+var CLIENT_NEGOCIO_ID = new URLSearchParams(window.location.search).get('negocio');
 
 function setupModo() {
   var toggle = document.getElementById('viewToggle');
   if (CLIENT_MODE) {
     if (toggle) toggle.style.display = 'none';
-    showView('reservar', null);
   } else {
     var btnReservar = document.getElementById('btnReservar');
     if (btnReservar) btnReservar.style.display = 'none';
@@ -478,60 +522,71 @@ var selectedTime = null;
 var selectedServices = [];
 var db, fb;
 
+/* ---------- MULTI-NEGOCIO ----------
+   Cada negocio vive bajo businesses/{businessId}. Usamos el UID del usuario
+   de Firebase Authentication como businessId (1 cuenta = 1 negocio). */
+var currentBusinessId = null;
+
+function refNegocio() { return fb.doc(db, 'businesses/' + currentBusinessId); }
+function refAppointments() { return fb.collection(db, 'businesses/' + currentBusinessId + '/appointments'); }
+function refAppointment(id) { return fb.doc(db, 'businesses/' + currentBusinessId + '/appointments/' + id); }
+function refClients() { return fb.collection(db, 'businesses/' + currentBusinessId + '/clients'); }
+function refClient(phone) { return fb.doc(db, 'businesses/' + currentBusinessId + '/clients/' + phone); }
+function refCounters() { return fb.doc(db, 'businesses/' + currentBusinessId + '/meta/counters'); }
+
 /* ---------- LOGIN DEL NEGOCIO ---------- */
 var isAdminAuthed = false;
 var configLoaded = false;
 var pendingView = null, pendingBtn = null;
-var primerCargaConfig = true;
 
 function normalizePhone(p) { return String(p||'').replace(/[^0-9]/g,''); }
 
-function initFirebaseListeners() {
-  db = window.db; fb = window.fb;
-
-  var configRef = fb.doc(db, 'config', 'main');
-  fb.onSnapshot(configRef, function(snap){
+/* Escucha los datos del negocio actual (currentBusinessId ya debe estar seteado).
+   adminMode=true suma la coleccion de clientes (solo hace falta en el panel del negocio). */
+function initNegocioListeners(adminMode) {
+  fb.onSnapshot(refNegocio(), function(snap){
     if (snap.exists()) {
       config = snap.data();
       if (!config.services) config.services = [];
-    } else {
-      config = JSON.parse(JSON.stringify(defaultConfig));
-      fb.setDoc(configRef, config).catch(function(e){ console.error(e); });
     }
     configLoaded = true;
     updateBizHeader();
     renderServiceOptions();
     renderSlots();
-    fillConfigForm();
-    if (primerCargaConfig && !CLIENT_MODE) {
-      primerCargaConfig = false;
-      guardVista('turnos', document.getElementById('btnTurnos'));
-    }
+    if (adminMode) fillConfigForm();
   }, function(err){ console.error(err); toast('No se pudo conectar con la base de datos'); });
 
-  var apptsRef = fb.collection(db, 'appointments');
-  fb.onSnapshot(apptsRef, function(snap){
+  fb.onSnapshot(refAppointments(), function(snap){
     appointments = [];
     snap.forEach(function(d){ appointments.push(Object.assign({ id: d.id }, d.data())); });
     renderSlots();
-    renderPendientes();
-    renderAgendaLists();
-    renderCaja();
-    updateTurnosCount();
-    renderReportes();
+    if (adminMode) {
+      renderPendientes();
+      renderAgendaLists();
+      renderCaja();
+      updateTurnosCount();
+      renderReportes();
+    }
   }, function(err){ console.error(err); });
 
-  var clientsRef = fb.collection(db, 'clients');
-  fb.onSnapshot(clientsRef, function(snap){
-    clients = [];
-    snap.forEach(function(d){ clients.push(Object.assign({ id: d.id }, d.data())); });
-    renderClientsList();
-    renderReportes();
-  }, function(err){ console.error(err); });
+  if (adminMode) {
+    fb.onSnapshot(refClients(), function(snap){
+      clients = [];
+      snap.forEach(function(d){ clients.push(Object.assign({ id: d.id }, d.data())); });
+      renderClientsList();
+      renderReportes();
+    }, function(err){ console.error(err); });
+  } else {
+    /* En modo cliente igual conviene poder autocompletar datos de clientes que vuelven */
+    fb.onSnapshot(refClients(), function(snap){
+      clients = [];
+      snap.forEach(function(d){ clients.push(Object.assign({ id: d.id }, d.data())); });
+    }, function(err){ console.error(err); });
+  }
 }
 
 function guardarConfigEnDB(cfg) {
-  fb.setDoc(fb.doc(db, 'config', 'main'), cfg).catch(function(e){ console.error(e); toast('Error al guardar la configuracion'); });
+  fb.setDoc(refNegocio(), cfg, { merge: true }).catch(function(e){ console.error(e); toast('Error al guardar la configuracion'); });
 }
 
 /* ---------- TOAST ---------- */
@@ -552,42 +607,25 @@ function showView(id, btn) {
   if (id === 'reportes') { initReportesDefaults(); showReportesSub('resumen'); renderReportes(); }
 }
 
-/* La vista "reservar" es publica. Las demas piden contraseña del negocio.
-   "Panel" la pide siempre, aunque ya estes logueado en otras pestañas,
-   porque ahi esta el cambio de contraseña y el borrado de datos. */
+/* La vista "reservar" es publica. Las demas requieren estar logueado (el gate de
+   bienvenida ya se encarga de eso antes de mostrar el header). "Panel" ademas
+   pide reconfirmar la contraseña cada vez, por ser la zona mas sensible. */
 function guardVista(id, btn) {
   if (id === 'reservar') { showView(id, btn); return; }
   if (!configLoaded) { toast('Cargando datos, espera un segundo...'); return; }
-  if (id !== 'panel' && isAdminAuthed) { showView(id, btn); return; }
-  pendingView = id; pendingBtn = btn;
-  openLoginModal();
+  if (id === 'panel') {
+    pendingView = id; pendingBtn = btn;
+    openPanelReauthModal();
+    return;
+  }
+  if (isAdminAuthed) { showView(id, btn); return; }
+  toast('Tenes que iniciar sesion');
 }
 
-function openLoginModal() {
-  var overlay = document.getElementById('adminLoginOverlay');
-  var title = document.getElementById('loginModalTitle');
-  var hint = document.getElementById('loginModalHint');
-  var emailField = document.getElementById('loginEmailField');
-  var emailInput = document.getElementById('loginEmailInput');
-  var input = document.getElementById('loginPasswordInput');
-  var submitBtn = document.getElementById('loginSubmitBtn');
-  input.value = '';
-  emailInput.value = '';
-  if (!config.adminEmail) {
-    title.textContent = '🔒 Crear acceso del negocio';
-    hint.textContent = 'Todavia no configuraste el acceso. Carga tu email y una contraseña (minimo 6 caracteres); despues la podes cambiar desde el Panel.';
-    emailField.style.display = 'block';
-    submitBtn.textContent = 'Crear y entrar';
-    submitBtn.onclick = submitCrearAdmin;
-  } else {
-    title.textContent = '🔒 Acceso del negocio';
-    hint.textContent = 'Ingresa la contraseña para ver turnos, agenda, reportes y configuracion.';
-    emailField.style.display = 'none';
-    submitBtn.textContent = 'Ingresar';
-    submitBtn.onclick = submitLogin;
-  }
-  overlay.style.display = 'flex';
-  input.focus();
+function openPanelReauthModal() {
+  document.getElementById('loginPasswordInput').value = '';
+  document.getElementById('adminLoginOverlay').style.display = 'flex';
+  document.getElementById('loginPasswordInput').focus();
 }
 
 function closeLoginModal() {
@@ -595,55 +633,149 @@ function closeLoginModal() {
   pendingView = null; pendingBtn = null;
 }
 
-/* Primera vez: crea un usuario real en Firebase Authentication (no un texto en la base) */
-function submitCrearAdmin() {
-  var email = document.getElementById('loginEmailInput').value.trim();
-  var pass = document.getElementById('loginPasswordInput').value;
-  if (!email || email.indexOf('@') === -1) { toast('Ingresa un email valido'); return; }
-  if (!pass || pass.length < 6) { toast('La contraseña debe tener al menos 6 caracteres'); return; }
-  window.fbAuth.createUserWithEmailAndPassword(window.auth, email, pass).then(function(){
-    config.adminEmail = email;
-    guardarConfigEnDB(config);
-    finishLogin();
-  }).catch(function(e){
-    console.error(e);
-    if (e.code === 'auth/email-already-in-use') {
-      toast('Ese email ya tiene una cuenta. Si la creaste vos antes, usa esa contraseña.');
-    } else {
-      toast('No se pudo crear el acceso (' + (e.code || 'error') + ')');
-    }
-  });
-}
-
-function submitLogin() {
+function submitReauthPanel() {
   var pass = document.getElementById('loginPasswordInput').value;
   if (!pass) { toast('Ingresa la contraseña'); return; }
-  window.fbAuth.signInWithEmailAndPassword(window.auth, config.adminEmail, pass).then(function(){
-    finishLogin();
+  var email = window.auth.currentUser ? window.auth.currentUser.email : null;
+  if (!email) { toast('Se perdio la sesion, volve a entrar'); return; }
+  window.fbAuth.signInWithEmailAndPassword(window.auth, email, pass).then(function(){
+    document.getElementById('adminLoginOverlay').style.display = 'none';
+    var id = pendingView, btn = pendingBtn;
+    pendingView = null; pendingBtn = null;
+    if (id) showView(id, btn);
   }).catch(function(e){
     console.error(e);
     toast('Contraseña incorrecta');
   });
 }
 
-function finishLogin() {
+/* ---------- PANTALLA DE BIENVENIDA (login / registro) ---------- */
+var gateMode = 'login';
+
+function cambiarTabGate(tab) {
+  gateMode = tab;
+  document.getElementById('gateTabLogin').classList.toggle('active', tab === 'login');
+  document.getElementById('gateTabSignup').classList.toggle('active', tab === 'signup');
+  document.getElementById('gateSubmitBtn').textContent = tab === 'login' ? 'Ingresar' : 'Crear cuenta';
+  document.getElementById('gateHint').textContent = tab === 'signup'
+    ? 'Vas a crear una cuenta nueva de negocio. Despues de crearla, el siguiente paso es activar el pago de la suscripcion.'
+    : '';
+}
+
+function mostrarGateAuth() {
+  document.getElementById('gatePago').style.display = 'none';
+  document.getElementById('gateAuth').style.display = 'flex';
+  document.getElementById('gateEmail').value = '';
+  document.getElementById('gatePassword').value = '';
+}
+
+function mostrarGatePago() {
+  document.getElementById('gateAuth').style.display = 'none';
+  document.getElementById('gatePago').style.display = 'flex';
+}
+
+function ocultarGates() {
+  document.getElementById('gateAuth').style.display = 'none';
+  document.getElementById('gatePago').style.display = 'none';
+}
+
+function submitGateLogin() {
+  var email = document.getElementById('gateEmail').value.trim();
+  var pass = document.getElementById('gatePassword').value;
+  if (!email || email.indexOf('@') === -1) { toast('Ingresa un email valido'); return; }
+  if (!pass || pass.length < 6) { toast('La contraseña debe tener al menos 6 caracteres'); return; }
+
+  if (gateMode === 'signup') {
+    window.fbAuth.createUserWithEmailAndPassword(window.auth, email, pass).then(function(cred){
+      currentBusinessId = cred.user.uid;
+      var nuevoNegocio = JSON.parse(JSON.stringify(defaultConfig));
+      nuevoNegocio.adminEmail = email;
+      nuevoNegocio.ownerUid = cred.user.uid;
+      nuevoNegocio.paid = false;
+      nuevoNegocio.createdAt = Date.now();
+      return fb.setDoc(refNegocio(), nuevoNegocio).then(function(){
+        config = nuevoNegocio;
+        mostrarGatePago();
+      });
+    }).catch(function(e){
+      console.error(e);
+      if (e.code === 'auth/email-already-in-use') {
+        toast('Ese email ya tiene una cuenta. Toca "Ingresar" en vez de "Crear cuenta".');
+      } else {
+        toast('No se pudo crear la cuenta (' + (e.code || 'error') + ')');
+      }
+    });
+  } else {
+    window.fbAuth.signInWithEmailAndPassword(window.auth, email, pass).then(function(cred){
+      resolverAccesoNegocio(cred.user.uid);
+    }).catch(function(e){
+      console.error(e);
+      toast('Email o contraseña incorrectos');
+    });
+  }
+}
+
+/* Revisa si el negocio de este usuario ya esta pagado; si lo esta, entra a la app */
+function resolverAccesoNegocio(uid) {
+  currentBusinessId = uid;
+  fb.getDoc(refNegocio()).then(function(snap){
+    if (!snap.exists()) {
+      var nuevoNegocio = JSON.parse(JSON.stringify(defaultConfig));
+      nuevoNegocio.ownerUid = uid;
+      nuevoNegocio.adminEmail = window.auth.currentUser ? window.auth.currentUser.email : '';
+      nuevoNegocio.paid = false;
+      nuevoNegocio.createdAt = Date.now();
+      return fb.setDoc(refNegocio(), nuevoNegocio).then(function(){ return nuevoNegocio; });
+    }
+    return snap.data();
+  }).then(function(data){
+    if (data.paid) {
+      entrarAlPanel();
+    } else {
+      config = data;
+      mostrarGatePago();
+    }
+  }).catch(function(e){
+    console.error(e);
+    toast('No se pudo verificar tu cuenta, intenta de nuevo');
+  });
+}
+
+function entrarAlPanel() {
   isAdminAuthed = true;
-  document.getElementById('adminLoginOverlay').style.display = 'none';
-  var id = pendingView, btn = pendingBtn;
-  pendingView = null; pendingBtn = null;
-  if (id) showView(id, btn);
-  toast('Acceso concedido');
+  ocultarGates();
+  document.querySelector('header').style.display = 'flex';
+  document.querySelector('main').style.display = 'block';
+  initNegocioListeners(true);
+  showView('turnos', document.getElementById('btnTurnos'));
+  toast('Bienvenido');
+}
+
+function revisarPagoGate() {
+  toast('Revisando...');
+  resolverAccesoNegocio(currentBusinessId);
+}
+
+function olvidoPasswordGate() {
+  var email = document.getElementById('gateEmail').value.trim();
+  if (!email || email.indexOf('@') === -1) { toast('Escribi tu email arriba primero'); return; }
+  window.fbAuth.sendPasswordResetEmail(window.auth, email).then(function(){
+    toast('Te mandamos un mail para restablecer la contraseña');
+  }).catch(function(e){
+    console.error(e);
+    toast('No se pudo enviar el mail (' + (e.code || 'error') + ')');
+  });
 }
 
 function cerrarSesionAdmin() {
   isAdminAuthed = false;
+  currentBusinessId = null;
+  configLoaded = false;
   if (window.auth) { window.fbAuth.signOut(window.auth).catch(function(e){ console.error(e); }); }
   toast('Sesion cerrada');
-  if (CLIENT_MODE) {
-    showView('reservar', null);
-  } else {
-    guardVista('turnos', document.getElementById('btnTurnos'));
-  }
+  document.querySelector('header').style.display = 'none';
+  document.querySelector('main').style.display = 'none';
+  mostrarGateAuth();
 }
 
 function cambiarPasswordAdmin() {
@@ -824,7 +956,7 @@ function buscarClientePorTelefono() {
 }
 
 function getNextClientNumber() {
-  var counterRef = fb.doc(db, 'meta', 'counters');
+  var counterRef = refCounters();
   return fb.runTransaction(db, function(tx){
     return tx.get(counterRef).then(function(snap){
       var current = (snap.exists() && snap.data().clientNumber) ? snap.data().clientNumber : 0;
@@ -837,7 +969,7 @@ function getNextClientNumber() {
 
 function guardarCliente(name, phone, email) {
   var norm = normalizePhone(phone);
-  var clientRef = fb.doc(db, 'clients', norm);
+  var clientRef = refClient(norm);
   var existente = clients.find(function(c){ return c.id === norm; });
   var hoy = fmtISO(new Date());
   if (existente) {
@@ -893,7 +1025,7 @@ function confirmarTurno() {
 
   guardarCliente(name, phone, email).catch(function(e){ console.error(e); });
 
-  fb.addDoc(fb.collection(db, 'appointments'), appt).then(function(){
+  fb.addDoc(refAppointments(), appt).then(function(){
     var d = new Date(selectedDate + 'T00:00:00');
     var fecha = d.getDate() + ' de ' + MESES[d.getMonth()];
     var serviciosMsg = selectedServices.map(function(s){
@@ -1047,42 +1179,79 @@ function renderAgenda() {
 }
 
 function setStatus(id, status) {
-  fb.updateDoc(fb.doc(db, 'appointments', id), { status: status })
+  fb.updateDoc(refAppointment(id), { status: status })
     .then(function(){ toast('Turno ' + status); })
     .catch(function(e){ console.error(e); toast('Error al actualizar el turno'); });
 }
 
 function confirmarPago(id) {
-  fb.updateDoc(fb.doc(db, 'appointments', id), { paid: true, paidAt: fmtISO(new Date()) })
+  fb.updateDoc(refAppointment(id), { paid: true, paidAt: fmtISO(new Date()) })
     .then(function(){ toast('Pago confirmado'); })
     .catch(function(e){ console.error(e); toast('Error al confirmar el pago'); });
 }
 
 function borrarTurno(id) {
-  fb.deleteDoc(fb.doc(db, 'appointments', id))
+  fb.deleteDoc(refAppointment(id))
     .then(function(){ toast('Turno eliminado'); })
     .catch(function(e){ console.error(e); toast('Error al eliminar el turno'); });
 }
 
 function reiniciarDatos() {
-  if (!confirm('Esto va a borrar TODOS los turnos, clientes y la configuracion de la base de datos compartida. Afecta a todos los dispositivos conectados y no se puede deshacer. Confirmas?')) return;
+  if (!confirm('Esto va a borrar TODOS los turnos y clientes de TU negocio (no toca tu cuenta ni tu login). No se puede deshacer. Confirmas?')) return;
   toast('Reiniciando datos...');
   Promise.all([
-    fb.getDocs(fb.collection(db, 'appointments')).then(function(snap){
+    fb.getDocs(refAppointments()).then(function(snap){
       return Promise.all(snap.docs.map(function(d){ return fb.deleteDoc(d.ref); }));
     }),
-    fb.getDocs(fb.collection(db, 'clients')).then(function(snap){
+    fb.getDocs(refClients()).then(function(snap){
       return Promise.all(snap.docs.map(function(d){ return fb.deleteDoc(d.ref); }));
     })
   ]).then(function(){
     return Promise.all([
-      fb.setDoc(fb.doc(db, 'config', 'main'), defaultConfig),
-      fb.setDoc(fb.doc(db, 'meta', 'counters'), { clientNumber: 0 })
+      fb.updateDoc(refNegocio(), { open: defaultConfig.open, close: defaultConfig.close, slotMin: defaultConfig.slotMin, services: defaultConfig.services }),
+      fb.setDoc(refCounters(), { clientNumber: 0 })
     ]);
   }).then(function(){
     toast('Datos reiniciados');
   }).catch(function(e){
     console.error(e); toast('Error al reiniciar los datos');
+  });
+}
+
+/* ---------- MIGRACION DE DATOS VIEJOS (un solo negocio, estructura anterior) ----------
+   Copia los datos de la version anterior (coleccion compartida config/appointments/clients)
+   a la cuenta nueva. Se ejecuta una sola vez, a mano, desde el Panel. */
+function migrarDatosViejos() {
+  if (!confirm('Esto copia los turnos, clientes y configuracion del sistema anterior a tu cuenta nueva. Hacelo una sola vez. ¿Continuar?')) return;
+  toast('Migrando datos anteriores...');
+  fb.getDoc(fb.doc(db, 'config', 'main')).then(function(snap){
+    var tareas = [];
+    if (snap.exists()) {
+      var old = snap.data();
+      tareas.push(fb.setDoc(refNegocio(), {
+        name: old.name || config.name, phone: old.phone || config.phone,
+        open: old.open || config.open, close: old.close || config.close,
+        slotMin: old.slotMin || config.slotMin, services: old.services || config.services
+      }, { merge: true }));
+    }
+    tareas.push(fb.getDocs(fb.collection(db, 'appointments')).then(function(snapA){
+      var proms = [];
+      snapA.forEach(function(d){ proms.push(fb.setDoc(refAppointment(d.id), d.data())); });
+      return Promise.all(proms);
+    }));
+    tareas.push(fb.getDocs(fb.collection(db, 'clients')).then(function(snapC){
+      var proms = [];
+      snapC.forEach(function(d){ proms.push(fb.setDoc(refClient(d.id), d.data())); });
+      return Promise.all(proms);
+    }));
+    tareas.push(fb.getDoc(fb.doc(db, 'meta', 'counters')).then(function(snapM){
+      if (snapM.exists()) return fb.setDoc(refCounters(), snapM.data());
+    }));
+    return Promise.all(tareas);
+  }).then(function(){
+    toast('Datos migrados correctamente');
+  }).catch(function(e){
+    console.error(e); toast('Error al migrar (revisa la consola)');
   });
 }
 
@@ -1141,7 +1310,7 @@ function renderWhatsAppLink() {
     return;
   }
   var base = window.location.origin + window.location.pathname;
-  var url = base + '?cliente=1';
+  var url = base + '?cliente=1&negocio=' + encodeURIComponent(currentBusinessId);
   linkEl.textContent = url;
   if (window.QRCode) {
     new QRCode(qrWrap, { text: url, width: 180, height: 180, colorDark: '#20242F', colorLight: '#ffffff' });
@@ -1284,19 +1453,38 @@ function updateTurnosCount() {
 }
 
 /* ---------- INIT ---------- */
+function arrancarApp() {
+  db = window.db; fb = window.fb;
+
+  if (CLIENT_MODE) {
+    /* Modo cliente: hace falta el id del negocio en el link (?negocio=...) */
+    if (!CLIENT_NEGOCIO_ID) {
+      document.querySelector('main').innerHTML =
+        '<div class="empty-state"><div class="icon">⚠️</div><p>Este link no es valido: falta indicar el negocio.</p></div>';
+      return;
+    }
+    currentBusinessId = CLIENT_NEGOCIO_ID;
+    showView('reservar', null);
+    initNegocioListeners(false);
+  } else {
+    /* Modo negocio: se oculta todo detras del gate de bienvenida hasta loguearse */
+    document.querySelector('header').style.display = 'none';
+    document.querySelector('main').style.display = 'none';
+    mostrarGateAuth();
+  }
+}
+
 window.onload = function() {
   setupModo();
-  updateBizHeader();
   renderDateRow();
   renderServiceOptions();
   renderSlots();
-  fillConfigForm();
   updateTurnosCount();
   renderCaja();
   if (window.db && window.fb) {
-    initFirebaseListeners();
+    arrancarApp();
   } else {
-    window.addEventListener('firebase-ready', initFirebaseListeners, { once: true });
+    window.addEventListener('firebase-ready', arrancarApp, { once: true });
   }
 };
 </script>
